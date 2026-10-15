@@ -1,4 +1,8 @@
-# Ember Kombat upgrade
+# Kortal Mombat upgrade
+- [ ] Rename the game, enforce presentation rules and report platform badge blocker.
+- [ ] Generate five original fighters with complete pose sets and balanced individual moves.
+- [ ] Finish original missing poses; match skins in every screen.
+- [ ] Improve fighting-game buttons and mobile selection/combat layout; verify flows and tests.
 - [x] Import original game and artwork safely.
 - [x] Fix timer, damage, winner announcements and post-match stats; verified real time-up match.
 - [x] Add four-button combat, crouch/uppercut/aerial transformations, combo recognition and selectable finisher effects.
