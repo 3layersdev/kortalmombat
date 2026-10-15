@@ -122,7 +122,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       if(phase!=="fight" || f.frozen>0 || f.act==="hit")return;
       const matching = combosFor(f.d).find(c=>matches(f,c.input));
       if(matching && f.spCd===0){
-        doSpecial(f,{name:matching.name,input:matching.input,type:["dash","uppercut","teleport","slam"][combosFor(f.d).indexOf(matching)%4] as Special["type"],dmg:matching.damage,color:f.d.color,desc:"Combo finisher"});f.buf=[];return;
+        doSpecial(f,{name:matching.name,input:matching.input,type:["dash","uppercut","teleport","slam"][combosFor(f.d).findIndex(c=>c.name===matching.name)%4] as Special["type"],dmg:matching.damage,color:f.d.color,desc:"Combo finisher"});f.buf=[];return;
       }
       if(busy(f) && f.t>6)return;
       if(keys.current.s && btn==="HP") {doSpecial(f,{name:"RISING UPPERCUT",input:[],type:"uppercut",dmg:10,color:f.d.color,desc:"Launcher"});return;}
