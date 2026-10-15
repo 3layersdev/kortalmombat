@@ -42,6 +42,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
   useEffect(() => {
     const canvas = cv.current; if (!canvas) return;
     const ctx = canvas.getContext("2d"); if (!ctx) return;
+    const compact = window.innerWidth <= 520;
     const background = new Image(); background.src = arena.fx === "snow" || arena.fx === "rain" ? iceScene : emberScene;
     const matchStats = {damage:0,hits:0,bestCombo:0,time:0};
     for (const d of [p1Def, p2Def]) for (const ps of ["idle", "walk", "jump", "strike", "kick", "block", "hit"] as const) spriteImg(d.skinId ?? d.id, ps);
@@ -290,6 +291,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
     };
 
     const bigText = (t: string, y: number, size: number, color = "#ffd36a") => {
+      if(compact)size=Math.min(size,t.length>10?38:76);
       ctx.font = `${size}px "Bebas Neue", Impact, sans-serif`; ctx.textAlign = "center";
       ctx.lineWidth = 8; ctx.strokeStyle = "#000"; ctx.strokeText(t, W / 2, y);
       ctx.fillStyle = color; ctx.fillText(t, W / 2, y);
@@ -334,7 +336,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
         updAttack(f); updSpecial(f);
         f.vy += GRAV; f.y += f.vy; if (f.y >= GROUND) { f.y = GROUND; f.vy = 0; }
         f.x += f.vx; f.vx *= 0.82; if (Math.abs(f.vx) < 0.1) f.vx = 0;
-        f.x = Math.max(40, Math.min(W - 40, f.x));
+        f.x = Math.max(compact ? 255 : 40, Math.min(compact ? W - 255 : W - 40, f.x));
         if (f.spCd > 0) f.spCd--;
         if (f.frozen > 0) f.frozen--;
         if (f.t > 0) { f.t--; if (f.t === 0 && f.act !== "ko" && f.act !== "win") { f.act = "idle"; f.spec = null; } }
