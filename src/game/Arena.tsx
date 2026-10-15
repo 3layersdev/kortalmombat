@@ -299,7 +299,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       frame++; phaseT++;
       const K = keys.current;
       if(K.finish!==undefined && winner){
-        const index=Number(K.finish);K.finish=undefined;const loser=other(winner);
+        const index=Number(K.finish);delete K.finish;const loser=other(winner);
         loser.vy=-8-(index%5)*2;loser.vx=winner.face*(4+index%7);shake=5+index%4;flash=5;
         burst(loser.x,loser.y-90,winner.d.color,35+index*2,5+index%6);
         for(let i=0;i<3+index%5;i++)burst(loser.x+(i-2)*35,loser.y-60-i*22,winner.d.color,12,4);
@@ -316,7 +316,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
         if (edge("k")) press(p1, "HK");
         if (edge("u")) press(p1, "LP");
         if (edge("i")) press(p1, "LK");
-        if (K.sp !== undefined) { const sp = p1.d.specials[K.sp as number]; if (sp && !busy(p1) && p1.spCd === 0) doSpecial(p1, sp); K.sp = undefined; }
+        if (K.sp !== undefined) { const sp = p1.d.specials[K.sp]; if (sp && !busy(p1) && p1.spCd === 0) doSpecial(p1, sp); delete K.sp; }
         if (!busy(p1)) {
           const blk = !!K.l && p1.y >= GROUND;
           p1.act = blk ? "block" : K.s && p1.y>=GROUND ? "crouch" : "idle";
@@ -327,7 +327,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
           }
         }
       }
-      K.sp = undefined;
+      delete K.sp;
       for (const k of ["a", "d", "w", "s", "j", "k", "l", "u", "i"]) prev[k] = !!K[k];
       runAI();
       for (const f of [p1, p2]) {
