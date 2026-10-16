@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { combosFor, roundWinner, FINISHERS, inputLabel, type ArenaDef, type FighterDef, type Special } from "./data";
+import { combosFor, roundWinner, finishersFor, inputLabel, type ArenaDef, type FighterDef, type Special } from "./data";
 import { sfx } from "./sfx";
-import { spriteImg } from "./sprites";
+import { spriteImg, ALL_POSES, type Pose } from "./sprites";
 import { Button } from "@/components/ui/button";
 import emberScene from "@/assets/ember-arena.jpg";
 import iceScene from "@/assets/frozen-cathedral.jpg";
@@ -45,13 +45,13 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
     const compact = window.innerWidth <= 520;
     const background = new Image(); background.src = arena.fx === "snow" || arena.fx === "rain" ? iceScene : emberScene;
     const matchStats = {damage:0,hits:0,bestCombo:0,time:0};
-    for (const d of [p1Def, p2Def]) for (const ps of ["idle", "walk", "jump", "strike", "kick", "block", "hit"] as const) spriteImg(d.skinId ?? d.id, ps);
+    for (const d of [p1Def, p2Def]) for (const ps of ALL_POSES) spriteImg(d.skinId ?? d.id, ps);
     let frame = 0;
     let p1 = mk(p1Def, 260, 1), p2 = mk(p2Def, 700, -1);
     let projs: Proj[] = [];
     const parts: Part[] = [], txts: Txt[] = [], amb: Part[] = [];
     let round = 1, w1 = 0, w2 = 0, timer = roundSeconds * 60, phase: "intro" | "fight" | "ko" | "draw" | "end" = "intro", phaseT = 0;
-    let banner = "", bannerSub = "", shake = 0, flash = 0, winner: F | null = null, flawless = false, bolt = 0;
+    let banner = "", bannerSub = "", shake = 0, flash = 0, winner: F | null = null, flawless = false, bolt = 0, finisherUsed = false;
     const prev: Record<string, boolean> = {};
     const ai = { move: 0, block: false, next: 0 };
 
@@ -63,7 +63,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
     const startRound = () => {
       p1 = mk(p1Def, 260, 1); p2 = mk(p2Def, 700, -1); projs = []; timer = roundSeconds * 60;
       p1.hp = p1.d.hp * initialHealth / 100;
-      setFinisher(null); setAnnouncement("");
+      finisherUsed = false; setFinisher(null); setAnnouncement("");
       phase = "intro"; phaseT = 0; banner = round === 3 ? "FINAL ROUND" : `ROUND ${round}`; bannerSub = "";
       sfx.gong(); sfx.say(round === 3 ? "Final round" : round === 1 ? "Round one" : "Round two");
     };
@@ -115,7 +115,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
     const matches = (f: F, seq: string[]) => {
       const b = f.buf; if (b.length < seq.length) return false;
       const tail = b.slice(-seq.length);
-      return tail.every((e, i) => e.k === seq[i]) && frame - (tail[0]?.f ?? frame) < 45;
+      return tail.every((e, i) => e.k === seq[i]) && frame - (tail[0]?.f ?? frame) < 90;
     };
     const push = (f: F, k: string) => { f.buf.push({ k, f: frame }); if (f.buf.length > 10) f.buf.shift(); };
     const press = (f: F, btn: "LP" | "HP" | "LK" | "HK") => {
@@ -123,7 +123,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       if(phase!=="fight" || f.frozen>0 || f.act==="hit")return;
       const matching = combosFor(f.d).find(c=>matches(f,c.input));
       if(matching && f.spCd===0){
-        doSpecial(f,{name:matching.name,input:matching.input,type:["dash","uppercut","teleport","slam"][combosFor(f.d).findIndex(c=>c.name===matching.name)%4] as Special["type"],dmg:matching.damage,color:f.d.color,desc:"Combo finisher"});f.buf=[];return;
+        doSpecial(f,{name:matching.name,input:matching.input,type:matching.type,dmg:matching.damage,color:matching.color,desc:"Combo finisher"});f.buf=[];return;
       }
       if(busy(f) && f.t>6)return;
       if(keys.current.s && btn==="HP") {doSpecial(f,{name:"RISING UPPERCUT",input:[],type:"uppercut",dmg:10,color:f.d.color,desc:"Launcher"});return;}
@@ -191,21 +191,20 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
 
     const drawF = (f: F) => {
       const s = f.d.scale ?? 1, a = f.act, air = f.y < GROUND - 2, sp = f.spec;
-      const combatPose = a === "punch" || a === "special" ? "strike" : a === "kick" ? "kick" : a === "block" ? "block" : a === "hit" || a === "ko" ? "hit" : undefined;
-      const pose = a === "crouch" ? "block" : combatPose ?? (air ? "jump" : a === "walk" ? "walk" : "idle");
-      const strike = pose === "strike" || pose === "kick";
+      const pose:Pose = a === "crouch" ? "crouch" : a === "win" ? "victory" : a === "special" && sp?.type === "uppercut" ? "uppercut" : a === "hit" || a === "ko" ? "hit" : a === "block" ? "block" : a === "punch" ? air ? "airpunch" : "strike" : a === "kick" ? air ? "airkick" : "kick" : a === "special" ? "strike" : air ? "jump" : a === "walk" ? "walk" : "idle";
+      const strike = ["strike","kick","uppercut","airpunch","airkick"].includes(pose);
       const img = spriteImg(f.d.skinId ?? f.d.id, pose);
       ctx.save();
       ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.beginPath(); ctx.ellipse(f.x, GROUND + 4, 48 * s, 10, 0, 0, 7); ctx.fill();
       if (!img.complete || !img.naturalWidth) { ctx.restore(); return; }
-      const h = 215 * s, w = (img.naturalWidth / img.naturalHeight) * h;
+      const h = (pose === "crouch" ? 150 : 215) * s, w = (img.naturalWidth / img.naturalHeight) * h;
       const ax = pose === "kick" ? 0.3 : strike ? 0.36 : 0.5;
       let rot = 0, sx = 1, sy = 1, ox = 0, oy = 0;
       if (a === "idle") sy = 1 + Math.sin(frame * 0.12) * 0.015;
       if (a === "walk") { oy = -Math.abs(Math.sin(frame * 0.3)) * 3; rot = Math.sin(frame * 0.3) * 0.018; sx = 1 + Math.sin(frame * 0.3) * 0.015; }
       if (a === "punch") { const k = Math.sin(((16 - f.t) / 16) * Math.PI); ox = k * 14; }
       if (a === "kick") { const k = Math.sin(((22 - f.t) / 22) * Math.PI); rot = -0.05 * k; ox = k * 10; }
-      if(a === "crouch"){ sy=.65; sx=1.08; }
+      if(a === "crouch"){ sx=1.02; }
       if(f.level.startsWith("L") && (a==="punch" || a==="kick")){sy=.78;rot=.1;}
       if (a === "block") { ox = -4; }
       if (a === "hit") { rot = -0.06; ox = -10; }
@@ -300,12 +299,13 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
     const update = () => {
       frame++; phaseT++;
       const K = keys.current;
-      if(K.finish!==undefined && winner){
+      if(K.finish!==undefined && winner && !finisherUsed){
+        finisherUsed=true;
         const index=Number(K.finish);delete K.finish;const loser=other(winner);
         loser.vy=-8-(index%5)*2;loser.vx=winner.face*(4+index%7);shake=5+index%4;flash=5;
         burst(loser.x,loser.y-90,winner.d.color,35+index*2,5+index%6);
         for(let i=0;i<3+index%5;i++)burst(loser.x+(i-2)*35,loser.y-60-i*22,winner.d.color,12,4);
-        banner=FINISHERS[index]?.toUpperCase() ?? "FINISHER";bannerSub=`${winner.d.name} WINS`;phaseT=150;
+        banner=finishersFor(winner.d)[index]?.name.toUpperCase() ?? "FINISHER";bannerSub=`${winner.d.name} WINS`;phaseT=150;
       }
       const taps: Record<string, boolean> = K.taps ?? {}; K.taps = {};
       const edge = (k: string) => !!taps[k] || (!!K[k] && !prev[k]);
@@ -336,7 +336,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
         updAttack(f); updSpecial(f);
         f.vy += GRAV; f.y += f.vy; if (f.y >= GROUND) { f.y = GROUND; f.vy = 0; }
         f.x += f.vx; f.vx *= 0.82; if (Math.abs(f.vx) < 0.1) f.vx = 0;
-        f.x = Math.max(compact ? 255 : 40, Math.min(compact ? W - 255 : W - 40, f.x));
+        f.x = Math.max(110, Math.min(W - 110, f.x));
         if (f.spCd > 0) f.spCd--;
         if (f.frozen > 0) f.frozen--;
         if (f.t > 0) { f.t--; if (f.t === 0 && f.act !== "ko" && f.act !== "win") { f.act = "idle"; f.spec = null; } }
@@ -379,7 +379,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
         if (phaseT >= 40 && winner.act !== "win" && winner.y >= GROUND && winner.frozen === 0) { winner.act = "win"; winner.t = 0; winner.spec = null; }
         if (phaseT === 70) {
           banner = `${winner.d.name} WINS`; bannerSub = timer <= 0 ? "TIME UP · HEALTH ADVANTAGE" : flawless ? "FLAWLESS VICTORY" : "";
-          if(w1>=2 || w2>=2)setFinisher(0);
+          if((w1>=2 || w2>=2) && !finisherUsed)setFinisher(0);
           sfx.say(flawless ? `${winner.d.name} wins. Flawless victory` : `${winner.d.name} wins`);
         }
         if (phaseT === 360) {
@@ -461,6 +461,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
   });
   const togglePause = () => { paused.current = !paused.current; setPaused(paused.current); };
 
+  const currentFinishers=finishersFor(hud.w1>=2?p1Def:p2Def);
   return (
     <div className="battle-shell">
       <img src={arena.fx === "snow" || arena.fx === "rain" ? iceScene : emberScene} alt="" className="arena-backdrop"/>
@@ -473,7 +474,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       <div className="arena-caption"><span>{arena.name}</span><span>{challenge || "BEST OF THREE"}</span></div>
       <Button variant="ghost" size="icon" onClick={togglePause} className="pause-button" aria-label="Pause">Ⅱ</Button>
       {announcement && <div className="round-announcement" role="status">{announcement}</div>}
-      {finisher!==null && <div className="finisher-picker"><select aria-label="Select finisher" value={finisher} onChange={e=>setFinisher(Number(e.target.value))}>{FINISHERS.map((f,i)=><option key={f} value={i}>{f}</option>)}</select><Button variant="game" onClick={()=>{sfx.ko();setAnnouncement(`${hud.w1>=2?p1Def.name:p2Def.name} · ${FINISHERS[finisher]}`);setFinisher(null);keys.current.finish=finisher;}}>FINISH</Button></div>}
+      {finisher!==null && <div className="finisher-picker"><select aria-label="Select finisher" value={finisher} onChange={e=>setFinisher(Number(e.target.value))}>{currentFinishers.map((f,i)=><option key={f.name} value={i}>{f.name}</option>)}</select><Button variant="game" onClick={()=>{sfx.ko();setAnnouncement(`${hud.w1>=2?p1Def.name:p2Def.name} · ${currentFinishers[finisher]?.name}`);setFinisher(null);keys.current.finish=finisher;}}>FINISH</Button></div>}
       <div className="combat-dock">
         <div className="direction-pad"><span/><Button variant="control" {...hold("w")} aria-label="Jump">↑</Button><span/><Button variant="control" {...hold("a")} aria-label="Move left">←</Button><Button variant="control" {...hold("s")} aria-label="Crouch">↓</Button><Button variant="control" {...hold("d")} aria-label="Move right">→</Button></div>
         <div className="special-controls">{p1Def.specials.map((sp,i)=><Button key={sp.name} variant="outline" disabled={hud.cd>0} onPointerDown={e=>{e.preventDefault();keys.current.sp=i;}}>{sp.name}</Button>)}<Button variant="outline" {...hold("l")}>GUARD</Button></div>

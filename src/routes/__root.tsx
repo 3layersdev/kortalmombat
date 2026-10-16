@@ -78,9 +78,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Ember Kombat" },
-      { name: "description", content: "The Ember Kombat fighting tournament." },
-      { property: "og:title", content: "Ember Kombat" },
+      { title: "Kortal Mombat" },
+      { name: "description", content: "The Kortal Mombat fighting tournament." },
+      { property: "og:title", content: "Kortal Mombat" },
       { property: "og:description", content: "Enter the tournament. Claim the throne." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
