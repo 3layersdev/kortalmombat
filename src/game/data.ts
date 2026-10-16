@@ -80,7 +80,14 @@ export const EXPANDED_FIGHTERS: FighterDef[] = names.map((name,i) => {
  if (!base) throw new Error("Missing base fighter");
  return {...base,id:name.toLowerCase(),name,skinId:base.id,hue:(Math.floor(i/6)+1)*31,title:["Flamebound Sentinel","Glacial Executioner","Stormborn Warrior","Stoneblood Titan","Shadowblade Adept","Steel Vanguard"][i%6] ?? "Warrior",hp:100+(i%5)*5,speed:4.5+(i%7)*.22,power:.92+(i%6)*.04,specials:base.specials.map((sp,j)=>({...sp,name:`${name[0]}${name.slice(1).toLowerCase()} ${j===0?"Surge":"Reversal"}`,dmg:9+(i+j)%5}))};
 });
-export const ROSTER = [...FIGHTERS,...EXPANDED_FIGHTERS,BOSS];
+export const ORIGINAL_FIGHTERS: FighterDef[] = [
+ {id:'vesper',name:'VESPER',title:'Ravenblade Assassin',color:'#51ccb9',accent:'#931735',hp:92,speed:6.1,power:.92,jump:19,specials:[{name:'Raven Step',input:['d','b','K'],type:'teleport',dmg:10,color:'#51ccb9',desc:'Crosses behind a guard to punish recovery'},{name:'Talon Rush',input:['b','f','P'],type:'dash',dmg:11,color:'#51ccb9',desc:'Fast gap closer into blade range'}]},
+ {id:'aegis',name:'AEGIS',title:'Emerald Bastion',color:'#66da91',accent:'#b22b40',hp:125,speed:3.9,power:1.14,jump:14,specials:[{name:'Bastion Break',input:['d','d','K'],type:'slam',dmg:13,color:'#66da91',desc:'Ground waves punish grounded approaches'},{name:'Sentinel Rise',input:['d','f','P'],type:'uppercut',dmg:12,color:'#66da91',desc:'Heavy anti-air launcher'}]},
+ {id:'calder',name:'CALDER',title:'The Magma Disciple',color:'#ef8051',accent:'#9c283d',hp:103,speed:4.9,power:1.04,jump:17,specials:[{name:'Cinder Palm',input:['d','f','P'],type:'projectile',dmg:11,color:'#ef8051',desc:'Controls space with a molten palm shot'},{name:'Caldera Rise',input:['d','d','P'],type:'uppercut',dmg:12,color:'#ef8051',desc:'Launches close rivals into the air'}]},
+ {id:'nymira',name:'NYMIRA',title:'Crescent Tide Duelist',color:'#54d8e5',accent:'#a82442',hp:96,speed:5.7,power:.96,jump:18,specials:[{name:'Undertow',input:['b','f','K'],type:'dash',dmg:10,color:'#54d8e5',desc:'A rushing crescent strike closes distance'},{name:'Pearl Prison',input:['d','f','P'],type:'freeze',dmg:7,color:'#54d8e5',desc:'A binding tide creates a follow-up opening'}]},
+ {id:'oryx',name:'ORYX',title:'The Ivory Hunter',color:'#8edff0',accent:'#d94839',hp:108,speed:5.2,power:1,jump:17,specials:[{name:'Ion Lance',input:['d','f','P'],type:'projectile',dmg:10,color:'#8edff0',desc:'Long-range energy lance checks advances'},{name:'Predator Shift',input:['d','b','K'],type:'teleport',dmg:11,color:'#8edff0',desc:'Repositions behind ranged opponents'}]},
+];
+export const ROSTER = [...ORIGINAL_FIGHTERS,...FIGHTERS,...EXPANDED_FIGHTERS,BOSS];
 export const COMBO_INPUTS = [
  ["LP","LP","HP"],["LP","HP","HK"],["LK","LP","HP"],["HP","LK","HK"],["LP","LK","HK"],
  ["LK","LK","HP"],["HP","HP","HK"],["HK","LP","HP"],["LP","HP","LK","HK"],["LK","LP","HK"],
@@ -88,7 +95,14 @@ export const COMBO_INPUTS = [
  ["HK","LP","LK"],["LP","LP","LK","HK"],["LK","LK","LP","HP"],["HP","LK","HK","LP"],["HK","HP","LK","LP"]
 ];
 const comboNames = ["Fang","Crescent","Rising Storm","Shatter","Requiem","Undertow","Breaker","Spiral","Judgment","Tempest","Reversal","Eclipse","Vortex","Avalanche","Crossfire","Aftershock","Cascade","Rampage","Last Light","Oblivion"];
-export const combosFor = (f:FighterDef) => COMBO_INPUTS.map((input,i)=>({name:`${f.name} ${comboNames[i]}`,input:input.map((x)=>x),damage:8+i%7}));
+const attackButtons = ['LP','HP','LK','HK'];
+const signatureNames:Record<string,string[]> = {vesper:['Raven','Talon','Feather','Nightfall'],aegis:['Bastion','Sentinel','Bulwark','Emerald'],calder:['Caldera','Cinder','Molten','Eruption'],nymira:['Crescent','Undertow','Pearl','Tide'],oryx:['Ion','Predator','Ivory','Hunter']};
+export const combosFor = (f:FighterDef) => {
+ const seed=Array.from(f.id).reduce((n,c)=>n+c.charCodeAt(0),0);
+ const order=[...attackButtons];let n=seed;
+ for(let i=3;i>0;i--){const j=n%(i+1);const a=order[i],b=order[j];if(a&&b){order[i]=b;order[j]=a;}n=Math.floor(n/(i+1));}
+ return COMBO_INPUTS.map((input,i)=>{const special=f.specials[i%f.specials.length];const type=special?.type??'uppercut';return {name:`${f.name} ${signatureNames[f.id]?.[i%4]??special?.name.split(' ')[0]??''} ${comboNames[i]}`,input:input.map(x=>order[attackButtons.indexOf(x)]??x),damage:8+(i+seed)%7,type,color:special?.color??f.color,advantage:type==='freeze'?'BIND':type==='uppercut'?'LAUNCH':type==='teleport'?'CROSS-UP':type==='dash'?'GAP CLOSE':type==='slam'?'GROUND CONTROL':'RANGE'};});
+};
 export const FINISHERS = ["Soul Eclipse","Infernal Spiral","Frozen Judgment","Thunderfall","Shadow Rift","Meteor Crown","Dragon's Wrath","Crystal Prison","Void Collapse","Solar Rupture","Phantom Swarm","Iron Tempest","Crimson Nova","Abyssal Gate","Storm Requiem","Celestial Break","Spectral Chain","Obsidian Rain","Eternal Frost","Final Ascension"];
 export const finishersFor = (f:FighterDef) => FINISHERS.map((name,i)=>({name:`${f.name} · ${name}`,index:i}));
 export function roundWinner(h1:number,h2:number): "p1"|"p2"|"draw" { return Math.abs(h1-h2)<.001?"draw":h1>h2?"p1":"p2"; }
