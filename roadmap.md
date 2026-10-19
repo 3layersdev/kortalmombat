@@ -1,4 +1,5 @@
 # Kortal Mombat upgrade
+- [ ] Fit every phone screen without scrolling, page roster/moves, smooth movement, and verify portrait/landscape flows.
 - [x] Rename the game and record the permanent no-badge presentation requirement.
 - [ ] Hide the platform badge — blocked by Lovable's editor-role and Pro-or-higher requirement; supported setting request was refused.
 - [x] Generate five original fighters with twelve poses each and individual tactical moves.
