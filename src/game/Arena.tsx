@@ -9,7 +9,7 @@ import iceScene from "@/assets/frozen-cathedral.jpg";
 const W = 960, H = 540, GROUND = 470, GRAV = 0.9;
 type Act = "idle" | "walk" | "punch" | "kick" | "block" | "hit" | "ko" | "special" | "win" | "crouch";
 interface F {
-  d: FighterDef; x: number; y: number; vx: number; vy: number; hp: number; face: number; act: Act; t: number;
+  d: FighterDef; x: number; y: number; px: number; py: number; pose: Pose; priorPose: Pose; poseAt: number; vx: number; vy: number; hp: number; face: number; act: Act; t: number;
   level: string; hit: boolean; frozen: number; spCd: number; buf: { k: string; f: number }[]; spec: Special | null; combo: number; lastHit: number;
 }
 interface Proj { x: number; y: number; vx: number; owner: F; dmg: number; color: string; freeze: boolean; life: number; wave: boolean }
@@ -17,7 +17,7 @@ interface Part { x: number; y: number; vx: number; vy: number; life: number; max
 interface Txt { x: number; y: number; text: string; life: number; color: string; size: number }
 
 const mk = (d: FighterDef, x: number, face: number): F => ({
-  d, x, y: GROUND, vx: 0, vy: 0, hp: d.hp, face, act: "idle", t: 0, level: "HP", hit: false, frozen: 0, spCd: 0, buf: [], spec: null, combo: 0, lastHit: -999,
+  d, x, y: GROUND, px: x, py: GROUND, pose: "idle", priorPose: "idle", poseAt: 0, vx: 0, vy: 0, hp: d.hp, face, act: "idle", t: 0, level: "HP", hit: false, frozen: 0, spCd: 0, buf: [], spec: null, combo: 0, lastHit: -999,
 });
 const R = Math.random;
 
@@ -107,7 +107,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       else if (sp.type === "uppercut") { f.vy = -16; f.vx = f.face * 3; f.t = 28; }
       else if (sp.type === "teleport") {
         burst(f.x, f.y - 90, sp.color, 24, 5);
-        f.x = Math.max(50, Math.min(W - 50, o.x - o.face * 95)); f.face = f.x < o.x ? 1 : -1;
+        f.x = Math.max(50, Math.min(W - 50, o.x - o.face * 95)); f.px=f.x; f.face = f.x < o.x ? 1 : -1;
         burst(f.x, f.y - 90, sp.color, 24, 5); f.t = 20;
       } else if (sp.type === "slam") { f.vy = -11; f.t = 34; }
     };
@@ -189,30 +189,33 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       }
     };
 
-    const drawF = (f: F) => {
+    const drawF = (f: F, alpha: number, now: number) => {
+      const x=f.px+(f.x-f.px)*alpha, y=f.py+(f.y-f.py)*alpha, visualFrame=frame+alpha;
       const s = f.d.scale ?? 1, a = f.act, air = f.y < GROUND - 2, sp = f.spec;
       const pose:Pose = a === "crouch" ? "crouch" : a === "win" ? "victory" : a === "special" && sp?.type === "uppercut" ? "uppercut" : a === "hit" || a === "ko" ? "hit" : a === "block" ? "block" : a === "punch" ? air ? "airpunch" : "strike" : a === "kick" ? air ? "airkick" : "kick" : a === "special" ? "strike" : air ? "jump" : a === "walk" ? "walk" : "idle";
+      if(pose!==f.pose){f.priorPose=f.pose;f.pose=pose;f.poseAt=now;}
+      const blend=Math.min(1,(now-f.poseAt)/85);
       const strike = ["strike","kick","uppercut","airpunch","airkick"].includes(pose);
       const img = spriteImg(f.d.skinId ?? f.d.id, pose);
       ctx.save();
-      ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.beginPath(); ctx.ellipse(f.x, GROUND + 4, 48 * s, 10, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.beginPath(); ctx.ellipse(x, GROUND + 4, Math.max(20,48-(GROUND-y)*.08) * s, 8, 0, 0, 7); ctx.fill();
       if (!img.complete || !img.naturalWidth) { ctx.restore(); return; }
       const h = (pose === "crouch" ? 150 : 215) * s, w = (img.naturalWidth / img.naturalHeight) * h;
       const ax = pose === "kick" ? 0.3 : strike ? 0.36 : 0.5;
       let rot = 0, sx = 1, sy = 1, ox = 0, oy = 0;
-      if (a === "idle") sy = 1 + Math.sin(frame * 0.12) * 0.015;
-      if (a === "walk") { oy = -Math.abs(Math.sin(frame * 0.3)) * 3; rot = Math.sin(frame * 0.3) * 0.018; sx = 1 + Math.sin(frame * 0.3) * 0.015; }
+      if (a === "idle") sy = 1 + Math.sin(visualFrame * 0.065) * 0.008;
+      if (a === "walk") { oy = -Math.abs(Math.sin(visualFrame * 0.22)) * 3; rot = Math.sin(visualFrame * 0.22) * 0.018; sx = 1 + Math.sin(visualFrame * 0.22) * 0.015; }
       if (a === "punch") { const k = Math.sin(((16 - f.t) / 16) * Math.PI); ox = k * 14; }
       if (a === "kick") { const k = Math.sin(((22 - f.t) / 22) * Math.PI); rot = -0.05 * k; ox = k * 10; }
       if(a === "crouch"){ sx=1.02; }
       if(f.level.startsWith("L") && (a==="punch" || a==="kick")){sy=.78;rot=.1;}
       if (a === "block") { ox = -4; }
       if (a === "hit") { rot = -0.06; ox = -10; }
-      if (a === "win") { sy = 1.04 + Math.sin(frame * 0.15) * 0.02; }
+      if (a === "win") { sy = 1.04 + Math.sin(visualFrame * 0.08) * 0.008; }
       if (air && a !== "ko") { rot += f.vy < 0 ? -0.08 : 0.06; sy *= 0.96; }
       if (a === "special" && sp?.type === "uppercut") rot = -0.35;
       if (a === "special" && sp?.type === "dash") rot = 0.18;
-      ctx.translate(f.x, f.y); ctx.scale(f.face, 1);
+      ctx.translate(x, y); ctx.scale(f.face, 1);
       if (a === "ko") { ctx.translate(-20, -8); ctx.rotate(-Math.PI / 2); ctx.translate(-h * 0.5 + 10, h * 0.25); }
       ctx.translate(ox, oy); ctx.rotate(rot); ctx.scale(sx, sy);
       const filters: string[] = [];
@@ -229,7 +232,8 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
         ctx.globalAlpha = 1;
       }
       ctx.filter = filters.join(" ") || "none";
-      ctx.drawImage(img, -w * ax, -h, w, h);
+      if(blend<1){const prior=spriteImg(f.d.skinId??f.d.id,f.priorPose);if(prior.complete&&prior.naturalWidth){const ph=(f.priorPose==="crouch"?150:215)*s,pw=prior.naturalWidth/prior.naturalHeight*ph;ctx.globalAlpha=1-blend;ctx.drawImage(prior,-pw*ax,-ph,pw,ph);}}
+      ctx.globalAlpha=blend;ctx.drawImage(img, -w * ax, -h, w, h);ctx.globalAlpha=1;
       ctx.filter = "none";
       if (a === "block") {
         ctx.strokeStyle = "rgba(154,216,255,.8)"; ctx.lineWidth = 4;
@@ -297,6 +301,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
     };
 
     const update = () => {
+      for(const f of [p1,p2]){f.px=f.x;f.py=f.y;}
       frame++; phaseT++;
       const K = keys.current;
       if(K.finish!==undefined && winner && !finisherUsed){
@@ -389,13 +394,15 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       }
     };
 
-    const render = () => {
+    const render = (alpha:number,now:number) => {
+      ctx.clearRect(0,0,W,H);
+      ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high";
       ctx.save();
       if (shake > 0) { ctx.translate((R() - 0.5) * shake, (R() - 0.5) * shake); shake *= 0.85; if (shake < 0.5) shake = 0; }
       drawBg();
       ambient();
       if (bolt > 0) { ctx.fillStyle = `rgba(220,230,255,${bolt / 16})`; ctx.fillRect(0, 0, W, H); bolt--; }
-      for (const f of [p1, p2].sort((a) => (a.act === "ko" ? -1 : 1))) drawF(f);
+      for (const f of [p1, p2].sort((a) => (a.act === "ko" ? -1 : 1))) drawF(f,alpha,now);
       for (const p of projs) {
         const r = p.wave ? 22 : 18;
         const g = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, r * 2);
@@ -432,7 +439,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       accumulator += Math.min(now-last,100);last=now;
       if (!paused.current) {
         while(accumulator>=1000/60){update();accumulator-=1000/60;}
-        render();
+        render(accumulator/(1000/60),now);
         if (frame % 2 === 0) setHud({ h1: (p1.hp / p1.d.hp) * 100, h2: (p2.hp / p2.d.hp) * 100, w1, w2, time: Math.ceil(timer / 60), cd: p1.spCd });
       }
       if(paused.current)accumulator=0;
@@ -456,7 +463,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
   const hold = (k: string) => ({
     onPointerDown: (e: React.PointerEvent) => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); keys.current.taps = { ...(keys.current.taps ?? {}), [k]: true }; keys.current[k] = true; },
     onPointerUp: () => { keys.current[k] = false; },
-    onPointerLeave: () => { keys.current[k] = false; },
+    onLostPointerCapture: () => { keys.current[k] = false; },
     onPointerCancel: () => { keys.current[k] = false; },
   });
   const togglePause = () => { paused.current = !paused.current; setPaused(paused.current); };
