@@ -16,3 +16,5 @@
 - Apply the no-platform-badge presentation requirement through supported publish settings, never DOM-removal scripts; platform injection cannot be controlled permanently by app code.
 - Resolve all portraits and combat poses through the shared sprite registry and shared skin class so selection and gameplay stay visually consistent.
 - Generated sprite atlases are sliced into transparent per-pose assets, with explicit pose coverage tests; never silently substitute standing artwork for missing combat poses.
+- Mobile scenes use viewport-bounded layouts and explicit roster/move pagination instead of scrolling, keeping every control reachable.
+- Render fighter positions with fixed-step interpolation and blend pose transitions; rendering must not alter the 60 Hz combat simulation.
