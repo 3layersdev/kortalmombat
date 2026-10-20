@@ -1,3 +1,5 @@
+import { signatureFor } from './finishers';
+
 export type SpecialType = "projectile" | "freeze" | "dash" | "uppercut" | "teleport" | "slam";
 export interface Special { name: string; input: string[]; type: SpecialType; dmg: number; color: string; desc: string }
 export interface FighterDef {
@@ -104,5 +106,8 @@ export const combosFor = (f:FighterDef) => {
  return COMBO_INPUTS.map((input,i)=>{const special=f.specials[i%f.specials.length];const type=special?.type??'uppercut';return {name:`${f.name} ${signatureNames[f.id]?.[i%4]??special?.name.split(' ')[0]??''} ${comboNames[i]}`,input:input.map(x=>order[attackButtons.indexOf(x)]??x),damage:8+(i+seed)%7,type,color:special?.color??f.color,advantage:type==='freeze'?'BIND':type==='uppercut'?'LAUNCH':type==='teleport'?'CROSS-UP':type==='dash'?'GAP CLOSE':type==='slam'?'GROUND CONTROL':'RANGE'};});
 };
 export const FINISHERS = ["Soul Eclipse","Infernal Spiral","Frozen Judgment","Thunderfall","Shadow Rift","Meteor Crown","Dragon's Wrath","Crystal Prison","Void Collapse","Solar Rupture","Phantom Swarm","Iron Tempest","Crimson Nova","Abyssal Gate","Storm Requiem","Celestial Break","Spectral Chain","Obsidian Rain","Eternal Frost","Final Ascension"];
-export const finishersFor = (f:FighterDef) => FINISHERS.map((name,i)=>({name:`${f.name} · ${name}`,index:i}));
+export const finishersFor = (f:FighterDef) => {
+ const signature=signatureFor(f);
+ return FINISHERS.map((name,i)=>({...signature,name:i===0?`${f.name} · ${signature.name}`:`${f.name} · ${signature.name} — ${name}`,index:i}));
+};
 export function roundWinner(h1:number,h2:number): "p1"|"p2"|"draw" { return Math.abs(h1-h2)<.001?"draw":h1>h2?"p1":"p2"; }
