@@ -18,3 +18,4 @@
 - Generated sprite atlases are sliced into transparent per-pose assets, with explicit pose coverage tests; never silently substitute standing artwork for missing combat poses.
 - Mobile scenes use viewport-bounded layouts and explicit roster/move pagination instead of scrolling, keeping every control reachable.
 - Render fighter positions with fixed-step interpolation and blend pose transitions; rendering must not alter the 60 Hz combat simulation.
+- Keep finisher signatures and cinematic timing in src/game/finishers.ts; victim transforms and canvas effects share the same fixed-step timeline so aftermath completes before match results.
