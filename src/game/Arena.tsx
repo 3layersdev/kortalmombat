@@ -3,7 +3,7 @@ import { combosFor, roundWinner, finishersFor, inputLabel, type ArenaDef, type F
 import { sfx } from "./sfx";
 import { spriteImg, ALL_POSES, type Pose } from "./sprites";
 import { Button } from "@/components/ui/button";
-import { FINISH_TIMING, finishStage, victimVisual, executionPose } from './finishers';
+import { FINISH_TIMING, victimVisual, executionPose } from './finishers';
 import { drawFinisherEffects } from './finisher-effects';
 import emberScene from "@/assets/ember-arena.jpg";
 import iceScene from "@/assets/frozen-cathedral.jpg";

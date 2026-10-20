@@ -18,7 +18,7 @@ const signatures: Record<string, { name: string; effect: FinishEffect; aftermath
   khaos: { name: 'Emperor’s Last Decree', effect: 'throne', aftermath: 'SEALED BENEATH THE THRONE' },
 };
 export function signatureFor(fighter: FighterDef) {
-  const signature = signatures[fighter.skinId ?? fighter.id] ?? signatures.khaos;
+  const signature = signatures[fighter.skinId ?? fighter.id] ?? signatures['khaos'];
   if (!signature) throw new Error('Missing finisher signature');
   return { ...signature, name: fighter.skinId ? `${fighter.name} ${signature.name}` : signature.name, color: fighter.specials[0]?.color ?? fighter.color };
 }
