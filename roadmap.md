@@ -1,4 +1,5 @@
 # Kortal Mombat upgrade
+- [ ] Add upright dizzy finisher readiness, fighter-specific cinematic finishes and visible victim aftermath; verify full matches and mobile fit.
 - [x] Fit every phone screen without scrolling, page all 62 fighters and moves, interpolate movement and blend poses; verified four phone sizes, portrait/landscape controls, and complete match results with seven passing tests.
 - [x] Rename the game and record the permanent no-badge presentation requirement.
 - [ ] Hide the platform badge — blocked by Lovable's editor-role and Pro-or-higher requirement; supported setting request was refused.
