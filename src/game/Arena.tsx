@@ -3,11 +3,13 @@ import { combosFor, roundWinner, finishersFor, inputLabel, type ArenaDef, type F
 import { sfx } from "./sfx";
 import { spriteImg, ALL_POSES, type Pose } from "./sprites";
 import { Button } from "@/components/ui/button";
+import { FINISH_TIMING, finishStage, victimVisual, executionPose } from './finishers';
+import { drawFinisherEffects } from './finisher-effects';
 import emberScene from "@/assets/ember-arena.jpg";
 import iceScene from "@/assets/frozen-cathedral.jpg";
 
 const W = 960, H = 540, GROUND = 470, GRAV = 0.9;
-type Act = "idle" | "walk" | "punch" | "kick" | "block" | "hit" | "ko" | "special" | "win" | "crouch";
+type Act = "idle" | "walk" | "punch" | "kick" | "block" | "hit" | "ko" | "special" | "win" | "crouch" | "dizzy";
 interface F {
   d: FighterDef; x: number; y: number; px: number; py: number; pose: Pose; priorPose: Pose; poseAt: number; vx: number; vy: number; hp: number; face: number; act: Act; t: number;
   level: string; hit: boolean; frozen: number; spCd: number; buf: { k: string; f: number }[]; spec: Special | null; combo: number; lastHit: number;
@@ -36,6 +38,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
   const [hud, setHud] = useState({ h1: 100, h2: 100, w1: 0, w2: 0, time: 99, cd: 0 });
   const [announcement,setAnnouncement] = useState("");
   const [finisher,setFinisher] = useState<number | null>(null);
+  const [finishState,setFinishState] = useState('');
   const endRef = useRef(onEnd);
   endRef.current = onEnd;
 
@@ -50,7 +53,8 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
     let p1 = mk(p1Def, 260, 1), p2 = mk(p2Def, 700, -1);
     let projs: Proj[] = [];
     const parts: Part[] = [], txts: Txt[] = [], amb: Part[] = [];
-    let round = 1, w1 = 0, w2 = 0, timer = roundSeconds * 60, phase: "intro" | "fight" | "ko" | "draw" | "end" = "intro", phaseT = 0;
+    let round = 1, w1 = 0, w2 = 0, timer = roundSeconds * 60, phase: "intro" | "fight" | "ko" | "draw" | "ready" | "finish" | "end" = "intro", phaseT = 0;
+    let cinematic: ReturnType<typeof finishersFor>[number] | null = null;
     let banner = "", bannerSub = "", shake = 0, flash = 0, winner: F | null = null, flawless = false, bolt = 0, finisherUsed = false;
     const prev: Record<string, boolean> = {};
     const ai = { move: 0, block: false, next: 0 };
@@ -63,14 +67,29 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
     const startRound = () => {
       p1 = mk(p1Def, 260, 1); p2 = mk(p2Def, 700, -1); projs = []; timer = roundSeconds * 60;
       p1.hp = p1.d.hp * initialHealth / 100;
-      finisherUsed = false; setFinisher(null); setAnnouncement("");
+      finisherUsed = false; cinematic = null; winner = null; setFinisher(null); setFinishState(''); setAnnouncement("");
       phase = "intro"; phaseT = 0; banner = round === 3 ? "FINAL ROUND" : `ROUND ${round}`; bannerSub = "";
       sfx.gong(); sfx.say(round === 3 ? "Final round" : round === 1 ? "Round one" : "Round two");
     };
     startRound();
 
     const other = (f: F) => (f === p1 ? p2 : p1);
-    const busy = (f: F) => f.frozen > 0 || ["punch", "kick", "hit", "special", "ko", "win"].includes(f.act);
+    const busy = (f: F) => f.frozen > 0 || ["punch", "kick", "hit", "special", "ko", "win", "dizzy"].includes(f.act);
+    const completeMatch = () => {
+      phase = 'end'; setFinisher(null); setFinishState('');
+      endRef.current(w1 >= 2,{rounds:`${w1} — ${w2}`,damage:Math.round(matchStats.damage),hits:matchStats.hits,bestCombo:matchStats.bestCombo,remainingHealth:Math.round(p1.hp/p1.d.hp*100),time:Math.round(matchStats.time/60)});
+    };
+    const beginFinish = (index: number) => {
+      if (phase !== 'ready' || !winner || finisherUsed) return;
+      const selected = finishersFor(winner.d)[index]; if (!selected) return;
+      cinematic = selected; finisherUsed = true; phase = 'finish'; phaseT = 0;
+      setFinisher(null); setFinishState('windup'); setAnnouncement(`${winner.d.name} · ${selected.name.split(' · ')[1] ?? selected.name}`);
+      winner.act = 'special'; winner.spec = null; winner.t = 0;
+      winner.x = winner === p1 ? 340 : 620; winner.px = winner.x;
+      const loser = other(winner); loser.x = winner === p1 ? 620 : 340; loser.px = loser.x;
+      winner.face = winner.x < loser.x ? 1 : -1; loser.face = -winner.face;
+      banner = ''; bannerSub = ''; sfx.special(selected.effect);
+    };
 
     const applyHit = (a: F, d: F, base: number, kb: number, o: { launch?: boolean; freeze?: boolean; heavy?: boolean } = {}) => {
       if (d.act === "ko" || phase !== "fight") return;
@@ -192,13 +211,15 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
     const drawF = (f: F, alpha: number, now: number) => {
       const x=f.px+(f.x-f.px)*alpha, y=f.py+(f.y-f.py)*alpha, visualFrame=frame+alpha;
       const s = f.d.scale ?? 1, a = f.act, air = f.y < GROUND - 2, sp = f.spec;
-      const pose:Pose = a === "crouch" ? "crouch" : a === "win" ? "victory" : a === "special" && sp?.type === "uppercut" ? "uppercut" : a === "hit" || a === "ko" ? "hit" : a === "block" ? "block" : a === "punch" ? air ? "airpunch" : "strike" : a === "kick" ? air ? "airkick" : "kick" : a === "special" ? "strike" : air ? "jump" : a === "walk" ? "walk" : "idle";
+      const victim = phase === 'finish' && cinematic && winner && f !== winner ? victimVisual(cinematic.effect,phaseT) : null;
+      const pose:Pose = phase === 'finish' && cinematic ? f === winner ? executionPose(cinematic.effect,phaseT) : victim?.pose ?? 'hit' : a === 'dizzy' ? 'idle' : a === "crouch" ? "crouch" : a === "win" ? "victory" : a === "special" && sp?.type === "uppercut" ? "uppercut" : a === "hit" || a === "ko" ? "hit" : a === "block" ? "block" : a === "punch" ? air ? "airpunch" : "strike" : a === "kick" ? air ? "airkick" : "kick" : a === "special" ? "strike" : air ? "jump" : a === "walk" ? "walk" : "idle";
       if(pose!==f.pose){f.priorPose=f.pose;f.pose=pose;f.poseAt=now;}
       const blend=Math.min(1,(now-f.poseAt)/85);
       const strike = ["strike","kick","uppercut","airpunch","airkick"].includes(pose);
       const img = spriteImg(f.d.skinId ?? f.d.id, pose);
       ctx.save();
-      ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.beginPath(); ctx.ellipse(x, GROUND + 4, Math.max(20,48-(GROUND-y)*.08) * s, 8, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.globalAlpha= victim?.opacity ?? 1; ctx.beginPath(); ctx.ellipse(x, GROUND + 4, Math.max(20,48-(GROUND-y)*.08) * s, 8, 0, 0, 7); ctx.fill(); ctx.globalAlpha=1;
+      if(victim?.buried){ctx.beginPath();ctx.rect(0,0,W,GROUND+4);ctx.clip();}
       if (!img.complete || !img.naturalWidth) { ctx.restore(); return; }
       const h = (pose === "crouch" ? 150 : 215) * s, w = (img.naturalWidth / img.naturalHeight) * h;
       const ax = pose === "kick" ? 0.3 : strike ? 0.36 : 0.5;
@@ -211,12 +232,15 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       if(f.level.startsWith("L") && (a==="punch" || a==="kick")){sy=.78;rot=.1;}
       if (a === "block") { ox = -4; }
       if (a === "hit") { rot = -0.06; ox = -10; }
+      if (a === 'dizzy') { rot = Math.sin(visualFrame*.09)*.065; ox = Math.sin(visualFrame*.09)*8; oy = Math.cos(visualFrame*.18)*2; }
+      if (victim) { rot = victim.rotation; ox = victim.offsetX; oy = victim.offsetY; }
       if (a === "win") { sy = 1.04 + Math.sin(visualFrame * 0.08) * 0.008; }
       if (air && a !== "ko") { rot += f.vy < 0 ? -0.08 : 0.06; sy *= 0.96; }
       if (a === "special" && sp?.type === "uppercut") rot = -0.35;
       if (a === "special" && sp?.type === "dash") rot = 0.18;
       ctx.translate(x, y); ctx.scale(f.face, 1);
-      if (a === "ko") { ctx.translate(-20, -8); ctx.rotate(-Math.PI / 2); ctx.translate(-h * 0.5 + 10, h * 0.25); }
+      if (a === "ko" && !victim) { ctx.translate(-20, -8); ctx.rotate(-Math.PI / 2); ctx.translate(-h * 0.5 + 10, h * 0.25); }
+      if(victim && phaseT>=180 && !victim.buried && victim.opacity===1){ctx.translate(0,-12);ctx.rotate(-Math.PI/2);ctx.translate(-h*.5,h*.25);rot=0;}
       ctx.translate(ox, oy); ctx.rotate(rot); ctx.scale(sx, sy);
       const filters: string[] = [];
       if(f.d.hue)filters.push(`hue-rotate(${f.d.hue}deg)`);
@@ -226,14 +250,16 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       if (a === "special" && sp) filters.push(`drop-shadow(0 0 14px ${sp.color})`);
       if (f.d.boss && a !== "hit") filters.push("drop-shadow(0 0 10px rgba(255,200,80,.5))");
       if (a === "ko") filters.push("brightness(.6)");
+      if(victim?.frozen)filters.push('saturate(.2) brightness(1.6)');
+      if(victim && phaseT>=180)filters.push('brightness(.55)');
       if (a === "special" && sp?.type === "dash") {
         ctx.globalAlpha = 0.25;
         for (let i = 1; i <= 3; i++) ctx.drawImage(img, -w * ax - i * 26, -h, w, h);
         ctx.globalAlpha = 1;
       }
       ctx.filter = filters.join(" ") || "none";
-      if(blend<1){const prior=spriteImg(f.d.skinId??f.d.id,f.priorPose);if(prior.complete&&prior.naturalWidth){const ph=(f.priorPose==="crouch"?150:215)*s,pw=prior.naturalWidth/prior.naturalHeight*ph;ctx.globalAlpha=1-blend;ctx.drawImage(prior,-pw*ax,-ph,pw,ph);}}
-      ctx.globalAlpha=blend;ctx.drawImage(img, -w * ax, -h, w, h);ctx.globalAlpha=1;
+      if(blend<1){const prior=spriteImg(f.d.skinId??f.d.id,f.priorPose);if(prior.complete&&prior.naturalWidth){const ph=(f.priorPose==="crouch"?150:215)*s,pw=prior.naturalWidth/prior.naturalHeight*ph;ctx.globalAlpha=(1-blend)*(victim?.opacity??1);ctx.drawImage(prior,-pw*ax,-ph,pw,ph);}}
+      ctx.globalAlpha=blend*(victim?.opacity??1);ctx.drawImage(img, -w * ax, -h, w, h);ctx.globalAlpha=1;
       ctx.filter = "none";
       if (a === "block") {
         ctx.strokeStyle = "rgba(154,216,255,.8)"; ctx.lineWidth = 4;
@@ -304,13 +330,19 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       for(const f of [p1,p2]){f.px=f.x;f.py=f.y;}
       frame++; phaseT++;
       const K = keys.current;
-      if(K.finish!==undefined && winner && !finisherUsed){
-        finisherUsed=true;
-        const index=Number(K.finish);delete K.finish;const loser=other(winner);
-        loser.vy=-8-(index%5)*2;loser.vx=winner.face*(4+index%7);shake=5+index%4;flash=5;
-        burst(loser.x,loser.y-90,winner.d.color,35+index*2,5+index%6);
-        for(let i=0;i<3+index%5;i++)burst(loser.x+(i-2)*35,loser.y-60-i*22,winner.d.color,12,4);
-        banner=finishersFor(winner.d)[index]?.name.toUpperCase() ?? "FINISHER";bannerSub=`${winner.d.name} WINS`;phaseT=150;
+      if(K.finish!==undefined){const index=Number(K.finish);delete K.finish;beginFinish(index);}
+      if(phase === 'ready' || phase === 'finish') {
+        if(phase === 'ready') {
+          if(winner === p2 && phaseT >= 110)beginFinish(0);
+          else if(phaseT >= FINISH_TIMING.ready)beginFinish(0);
+        } else if(cinematic && winner) {
+          if(phaseT === 60){setFinishState('execution');sfx.special(cinematic.effect);}
+          if(phaseT >= 60 && phaseT < 180 && phaseT%24===0){sfx.whoosh();burst(other(winner).x,GROUND-110,cinematic.color,10,5);shake=4;}
+          if(phaseT === 180){setFinishState('aftermath');shake=16;flash=7;sfx.ko();burst(other(winner).x,GROUND-100,cinematic.color,55,9);winner.act='win';setAnnouncement(`${other(winner).d.name} · ${cinematic.aftermath}`);sfx.say('Fatality');}
+          if(phaseT >= FINISH_TIMING.end){completeMatch();return;}
+        }
+        for(const k of ['a','d','w','s','j','k','l','u','i'])prev[k]=!!K[k];
+        K.taps={};delete K.sp;return;
       }
       const taps: Record<string, boolean> = K.taps ?? {}; K.taps = {};
       const edge = (k: string) => !!taps[k] || (!!K[k] && !prev[k]);
@@ -376,6 +408,13 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
           loser.act = "ko"; loser.t = 0; loser.frozen = 0; loser.vy = -8; loser.spec = null; projs = [];
           if (!busy(winner)) winner.act = "idle";
           if (p1w) w1++; else w2++;
+          if(w1>=2 || w2>=2){
+            loser.act='dizzy';loser.y=GROUND;loser.py=GROUND;loser.vy=0;loser.vx=0;
+            winner.act='idle';winner.t=0;winner.spec=null;winner.frozen=0;winner.y=GROUND;winner.py=GROUND;winner.vx=0;winner.vy=0;
+            phase='ready';phaseT=0;banner='FINISH THEM';bannerSub='';setFinishState('ready');
+            setAnnouncement(`ROUND ${round} · ${winner.d.name} WINS${timer<=0?' · MORE HEALTH':''}`);
+            if(p1w)setFinisher(0);sfx.say('Finish them');return;
+          }
           phase = "ko"; phaseT = 0; banner = timer <= 0 ? "TIME UP" : "K.O.";
           setAnnouncement(`ROUND ${round} · ${winner.d.name} WINS${timer<=0?" · MORE HEALTH":""}`); flash = 12; sfx.ko();
         }
@@ -384,11 +423,10 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
         if (phaseT >= 40 && winner.act !== "win" && winner.y >= GROUND && winner.frozen === 0) { winner.act = "win"; winner.t = 0; winner.spec = null; }
         if (phaseT === 70) {
           banner = `${winner.d.name} WINS`; bannerSub = timer <= 0 ? "TIME UP · HEALTH ADVANTAGE" : flawless ? "FLAWLESS VICTORY" : "";
-          if((w1>=2 || w2>=2) && !finisherUsed)setFinisher(0);
           sfx.say(flawless ? `${winner.d.name} wins. Flawless victory` : `${winner.d.name} wins`);
         }
         if (phaseT === 360) {
-          if (w1 >= 2 || w2 >= 2) { phase = "end"; endRef.current(w1 >= 2,{rounds:`${w1} — ${w2}`,damage:Math.round(matchStats.damage),hits:matchStats.hits,bestCombo:matchStats.bestCombo,remainingHealth:Math.round(p1.hp/p1.d.hp*100),time:Math.round(matchStats.time/60)}); }
+          if (w1 >= 2 || w2 >= 2) { completeMatch(); }
           else { round++; startRound(); }
         }
       }
@@ -401,8 +439,10 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       if (shake > 0) { ctx.translate((R() - 0.5) * shake, (R() - 0.5) * shake); shake *= 0.85; if (shake < 0.5) shake = 0; }
       drawBg();
       ambient();
+      if(phase==='ready'||phase==='finish'){ctx.fillStyle='rgba(0,0,0,.3)';ctx.fillRect(0,0,W,H);}
       if (bolt > 0) { ctx.fillStyle = `rgba(220,230,255,${bolt / 16})`; ctx.fillRect(0, 0, W, H); bolt--; }
       for (const f of [p1, p2].sort((a) => (a.act === "ko" ? -1 : 1))) drawF(f,alpha,now);
+      if(phase==='finish' && cinematic && winner)drawFinisherEffects(ctx,cinematic.effect,phaseT+alpha,other(winner).x,winner.x,GROUND,cinematic.color,cinematic.index);
       for (const p of projs) {
         const r = p.wave ? 22 : 18;
         const g = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, r * 2);
@@ -429,7 +469,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       ctx.globalAlpha = 1;
       ctx.restore();
       if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${flash / 14})`; ctx.fillRect(0, 0, W, H); flash--; }
-      if (banner) bigText(banner, 250, banner.length > 10 ? 76 : 110, banner === "K.O." ? "#ff3a2a" : "#ffd36a");
+      if (banner) bigText(banner, phase==='ready'?155:250, banner.length > 10 ? 76 : 110, banner === "K.O." ? "#ff3a2a" : "#ffd36a");
       if (bannerSub) bigText(bannerSub, 320, 52, "#ffffff");
     };
 
@@ -470,7 +510,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
 
   const currentFinishers=finishersFor(hud.w1>=2?p1Def:p2Def);
   return (
-    <div className="battle-shell">
+    <div className={`battle-shell ${finishState ? 'finishing-scene' : ''}`} data-finisher-stage={finishState || undefined}>
       <img src={arena.fx === "snow" || arena.fx === "rain" ? iceScene : emberScene} alt="" className="arena-backdrop"/>
       <div className="battle-hud">
         <Bar hp={hud.h1} name={p1Def.name} wins={hud.w1}/>
@@ -481,7 +521,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       <div className="arena-caption"><span>{arena.name}</span><span>{challenge || "BEST OF THREE"}</span></div>
       <Button variant="ghost" size="icon" onClick={togglePause} className="pause-button" aria-label="Pause">Ⅱ</Button>
       {announcement && <div className="round-announcement" role="status">{announcement}</div>}
-      {finisher!==null && <div className="finisher-picker"><select aria-label="Select finisher" value={finisher} onChange={e=>setFinisher(Number(e.target.value))}>{currentFinishers.map((f,i)=><option key={f.name} value={i}>{f.name}</option>)}</select><Button variant="game" onClick={()=>{sfx.ko();setAnnouncement(`${hud.w1>=2?p1Def.name:p2Def.name} · ${currentFinishers[finisher]?.name}`);setFinisher(null);keys.current.finish=finisher;}}>FINISH</Button></div>}
+      {finisher!==null && <div className="finisher-picker"><select aria-label="Select finisher" value={finisher} onChange={e=>setFinisher(Number(e.target.value))}>{currentFinishers.map((f,i)=><option key={f.name} value={i}>{f.name}</option>)}</select><Button variant="game" onClick={()=>{setFinisher(null);keys.current.finish=finisher;}}>FINISH</Button></div>}
       <div className="combat-dock">
         <div className="direction-pad"><span/><Button variant="control" {...hold("w")} aria-label="Jump">↑</Button><span/><Button variant="control" {...hold("a")} aria-label="Move left">←</Button><Button variant="control" {...hold("s")} aria-label="Crouch">↓</Button><Button variant="control" {...hold("d")} aria-label="Move right">→</Button></div>
         <div className="special-controls">{p1Def.specials.map((sp,i)=><Button key={sp.name} variant="outline" disabled={hud.cd>0} onPointerDown={e=>{e.preventDefault();keys.current.sp=i;}}>{sp.name}</Button>)}<Button variant="outline" {...hold("l")}>GUARD</Button></div>
