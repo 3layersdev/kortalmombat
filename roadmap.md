@@ -1,5 +1,5 @@
 # Kortal Mombat upgrade
-- [ ] Add upright dizzy finisher readiness, fighter-specific cinematic finishes and visible victim aftermath; verify full matches and mobile fit.
+- [x] Add upright dizzy finisher readiness, twelve skin-family signature cinematics and visible victim aftermath; full timed match, player-selected burial, final result and phone portrait/landscape fit verified; eleven tests pass.
 - [x] Fit every phone screen without scrolling, page all 62 fighters and moves, interpolate movement and blend poses; verified four phone sizes, portrait/landscape controls, and complete match results with seven passing tests.
 - [x] Rename the game and record the permanent no-badge presentation requirement.
 - [ ] Hide the platform badge — blocked by Lovable's editor-role and Pro-or-higher requirement; supported setting request was refused.
@@ -13,4 +13,4 @@
 - [x] Improve introduction, procedural scene music and full-screen mobile/desktop UI.
 - [x] Verify combat, mobile/landscape layouts, build and six tests.
 ## Deferred earlier expansion scope
-The fifty earlier expansion fighters remain explicitly labeled skin variants, sharing source artwork and effect families. Twenty bespoke animated combo/fatality sequences per fighter are not delivered by this update; the five new original designs have twelve pose assets each, individual special kits and twenty character-flavored tactical combos.
+The fifty earlier expansion fighters remain explicitly labeled skin variants, sharing source artwork and effect families. Each original skin now has a signature cinematic with a visible victim aftermath; twenty selectable finishes share that signature effect family rather than twenty bespoke animations. The five new original designs have twelve pose assets each, individual special kits and twenty character-flavored tactical combos.
