@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { combosFor, roundWinner, finishersFor, inputLabel, type ArenaDef, type FighterDef, type Special } from "./data";
 import { sfx } from "./sfx";
-import { spriteImg, ALL_POSES, type Pose } from "./sprites";
+import { spriteImg, posesFor, motionPose, type Pose } from "./sprites";
 import { Button } from "@/components/ui/button";
 import { FINISH_TIMING, victimVisual, executionPose } from './finishers';
 import { drawFinisherEffects } from './finisher-effects';
-import emberScene from "@/assets/ember-arena.jpg";
-import iceScene from "@/assets/frozen-cathedral.jpg";
+import { arenaArt, arenaImage, animateScenery } from './scenery';
 
 const W = 960, H = 540, GROUND = 470, GRAV = 0.9;
 type Act = "idle" | "walk" | "punch" | "kick" | "block" | "hit" | "ko" | "special" | "win" | "crouch" | "dizzy";
@@ -46,9 +45,10 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
     const canvas = cv.current; if (!canvas) return;
     const ctx = canvas.getContext("2d"); if (!ctx) return;
     const compact = window.innerWidth <= 520;
-    const background = new Image(); background.src = arena.fx === "snow" || arena.fx === "rain" ? iceScene : emberScene;
+    const background = arenaImage(arena);
+    const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const matchStats = {damage:0,hits:0,bestCombo:0,time:0};
-    for (const d of [p1Def, p2Def]) for (const ps of ALL_POSES) spriteImg(d.skinId ?? d.id, ps);
+    for (const d of [p1Def, p2Def]) for (const ps of posesFor(d.skinId??d.id)) spriteImg(d.skinId ?? d.id, ps);
     let frame = 0;
     let p1 = mk(p1Def, 260, 1), p2 = mk(p2Def, 700, -1);
     let projs: Proj[] = [];
@@ -212,10 +212,11 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       const x=f.px+(f.x-f.px)*alpha, y=f.py+(f.y-f.py)*alpha, visualFrame=frame+alpha;
       const s = f.d.scale ?? 1, a = f.act, air = f.y < GROUND - 2, sp = f.spec;
       const victim = phase === 'finish' && cinematic && winner && f !== winner ? victimVisual(cinematic.effect,phaseT) : null;
-      const pose:Pose = phase === 'finish' && cinematic ? f === winner ? executionPose(cinematic.effect,phaseT) : victim?.pose ?? 'hit' : a === 'dizzy' ? 'idle' : a === "crouch" ? "crouch" : a === "win" ? "victory" : a === "special" && sp?.type === "uppercut" ? "uppercut" : a === "hit" || a === "ko" ? "hit" : a === "block" ? "block" : a === "punch" ? air ? "airpunch" : "strike" : a === "kick" ? air ? "airkick" : "kick" : a === "special" ? "strike" : air ? "jump" : a === "walk" ? "walk" : "idle";
+      const basePose:Pose = phase === 'finish' && cinematic ? f === winner ? executionPose(cinematic.effect,phaseT) : victim?.pose ?? 'hit' : a === 'dizzy' ? 'idle' : a === "crouch" ? "crouch" : a === "win" ? "victory" : a === "special" && sp?.type === "uppercut" ? "uppercut" : a === "hit" || a === "ko" ? "hit" : a === "block" ? "block" : a === "punch" ? air ? "airpunch" : "strike" : a === "kick" ? air ? "airkick" : "kick" : a === "special" ? "strike" : air ? "jump" : a === "walk" ? "walk" : "idle";
+      const pose=phase==='finish'?basePose:motionPose(basePose,visualFrame,f.t,f.d.skinId??f.d.id);
       if(pose!==f.pose){f.priorPose=f.pose;f.pose=pose;f.poseAt=now;}
       const blend=Math.min(1,(now-f.poseAt)/85);
-      const strike = ["strike","kick","uppercut","airpunch","airkick"].includes(pose);
+      const strike = ["strike","kick","uppercut","airpunch","airkick","punchwind","punchrecover","kickwind","kickrecover"].includes(pose);
       const img = spriteImg(f.d.skinId ?? f.d.id, pose);
       ctx.save();
       ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.globalAlpha= victim?.opacity ?? 1; ctx.beginPath(); ctx.ellipse(x, GROUND + 4, Math.max(20,48-(GROUND-y)*.08) * s, 8, 0, 0, 7); ctx.fill(); ctx.globalAlpha=1;
@@ -270,7 +271,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
     };
 
     const drawBg = () => {
-      if(background.complete && background.naturalWidth){ctx.drawImage(background,0,0,W,H);return;}
+      if(background.complete && background.naturalWidth){ctx.drawImage(background,0,0,W,H);animateScenery(ctx,arena,frame,reducedMotion);return;}
       const g = ctx.createLinearGradient(0, 0, 0, GROUND);
       g.addColorStop(0, arena.sky[0]); g.addColorStop(1, arena.sky[1]);
       ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, GROUND + 20);
@@ -394,8 +395,8 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
         if (dead) projs.splice(i, 1);
       }
       if (phase === "intro") {
-        if (phaseT === 80) { banner = "FIGHT!"; sfx.say("Fight!"); sfx.punch(); }
-        if (phaseT >= 125) { phase = "fight"; banner = ""; }
+        if (phaseT === 24) { banner = "FIGHT!"; sfx.say("Fight!"); sfx.punch(); }
+        if (phaseT >= 48) { phase = "fight"; banner = ""; }
       } else if (phase === "fight") {
         if(!training)timer--;
         matchStats.time++;
@@ -511,7 +512,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
   const currentFinishers=finishersFor(hud.w1>=2?p1Def:p2Def);
   return (
     <div className={`battle-shell ${finishState ? 'finishing-scene' : ''}`} data-finisher-stage={finishState || undefined}>
-      <img src={arena.fx === "snow" || arena.fx === "rain" ? iceScene : emberScene} alt="" className="arena-backdrop"/>
+      <img src={arenaArt(arena)} alt="" className="arena-backdrop"/>
       <div className="battle-hud">
         <Bar hp={hud.h1} name={p1Def.name} wins={hud.w1}/>
         <div className="round-clock"><strong>{training ? "∞" : hud.time}</strong><span>{stage}</span></div>
