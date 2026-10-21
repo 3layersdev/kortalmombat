@@ -1,4 +1,5 @@
 # Kortal Mombat upgrade
+- [ ] Add additional movement frames, distinct animated arena artwork, and early fight asset preparation; verify gameplay and phone fit.
 - [x] Add upright dizzy finisher readiness, twelve skin-family signature cinematics and visible victim aftermath; full timed match, player-selected burial, final result and phone portrait/landscape fit verified; eleven tests pass.
 - [x] Fit every phone screen without scrolling, page all 62 fighters and moves, interpolate movement and blend poses; verified four phone sizes, portrait/landscape controls, and complete match results with seven passing tests.
 - [x] Rename the game and record the permanent no-badge presentation requirement.
