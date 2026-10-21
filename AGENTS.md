@@ -19,3 +19,5 @@
 - Mobile scenes use viewport-bounded layouts and explicit roster/move pagination instead of scrolling, keeping every control reachable.
 - Render fighter positions with fixed-step interpolation and blend pose transitions; rendering must not alter the 60 Hz combat simulation.
 - Keep finisher signatures and cinematic timing in src/game/finishers.ts; victim transforms and canvas effects share the same fixed-step timeline so aftermath completes before match results.
+- Keep arena painting selection, decoded image caching and environmental animation in src/game/scenery.ts; warm selected fighter poses before entering combat to avoid missing first-frame artwork.
+- Movement keyframes use skin-preserving articulated deformation of the original walk sprite; optional bespoke attack frames are registered per skin, never substituted for other fighters' artwork.

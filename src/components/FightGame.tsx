@@ -4,7 +4,8 @@ import {Button} from '@/components/ui/button';
 import intro from '@/assets/intro-bg.jpg.asset.json';
 import {Arena,type MatchStats} from '@/game/Arena';
 import {ARENAS,BOSS,ROSTER,MODES,combosFor,finishersFor,inputLabel,type FighterDef,type GameMode,type ArenaDef} from '@/game/data';
-import {fighterSprite,skinClass} from '@/game/sprites';
+import {fighterSprite,skinClass,warmFighter} from '@/game/sprites';
+import {arenaImage,warmScenery} from '@/game/scenery';
 import {sfx,setMuted,sceneMusic} from '@/game/sfx';
 
 type Screen='intro'|'menu'|'select'|'vs'|'fight'|'result'|'moves';
@@ -17,6 +18,8 @@ export function FightGame(){
  const [player,setPlayer]=useState<FighterDef|undefined>(first);const [battles,setBattles]=useState<Battle[]>([]);const [step,setStep]=useState(0);
  const [muted,setM]=useState(false);const [won,setWon]=useState(false);const [stats,setStats]=useState(emptyStats);const [carry,setCarry]=useState(100);const [points,setPoints]=useState(0);
  const battle=battles[step];
+ useEffect(()=>{warmScenery(ARENAS);if(first)void warmFighter(first);},[]);
+ useEffect(()=>{if(battle&&player){void warmFighter(player);void warmFighter(battle.enemy);void arenaImage(battle.arena).decode().catch(()=>{});}},[battle,player]);
  useEffect(()=>{if(screen==='intro')return;return sceneMusic(screen==='fight'?'fight':screen==='result'&&won?'victory':'menu');},[screen,won]);
  const mute=()=>setM(m=>{setMuted(!m);return !m;});
  const enter=()=>{sfx.unlock();sfx.gong();setScreen('menu');};
@@ -43,14 +46,18 @@ export function FightGame(){
 function Portrait({fighter,pose='idle'}:{fighter:FighterDef;pose?:'idle'|'victory'}){return <img src={fighterSprite(fighter,pose)} className={`fighter-portrait ${skinClass(fighter)}`} alt={fighter.name} draggable={false}/>;}
 function Stat({value,label}:{value:string|number;label:string}){return <div><strong>{value}</strong><span>{label}</span></div>;}
 function FighterSelect({mode,archive,onBack,onPick}:{mode:GameMode;archive:boolean;onBack:()=>void;onPick:(f:FighterDef)=>void}){
- const [rosterPage,setRosterPage]=useState(0);const [movePage,setMovePage]=useState(0);const [selected,setSelected]=useState(0);const [query,setQuery]=useState('');const [tab,setTab]=useState<'specials'|'combos'|'finishers'>('specials');const fighter=ROSTER[selected]??first;if(!fighter)return null;
+ const [rosterPage,setRosterPage]=useState(0);const [movePage,setMovePage]=useState(0);const [selected,setSelected]=useState(0);const [query,setQuery]=useState('');const [tab,setTab]=useState<'specials'|'combos'|'finishers'>('specials');const fighter=ROSTER[selected]??first;
+ useEffect(()=>{if(fighter)void warmFighter(fighter);},[fighter]);
+ if(!fighter)return null;
  const visible=ROSTER.filter(f=>`${f.name} ${f.title}`.toLowerCase().includes(query.toLowerCase()));
  const pageCount=Math.max(1,Math.ceil(visible.length/8));const page=Math.min(rosterPage,pageCount-1);const moves=tab==='specials'?fighter.specials.map(s=>({name:s.name,input:inputLabel(s.input),advantage:''})):tab==='combos'?combosFor(fighter).map(c=>({name:c.name,input:c.input.join(' › '),advantage:c.advantage})):finishersFor(fighter).map(f=>({name:f.name,input:String(f.index+1).padStart(2,'0'),advantage:''}));
  return <section className="select-screen"><div className="section-heading"><div><Button variant="ghost" className="back-link" onClick={onBack}><ArrowLeft/>MAIN MENU</Button><p className="eyebrow">{archive?'THE MOVE ARCHIVE':MODES.find(m=>m.id===mode)?.name}</p><h1>{archive?'KNOW YOUR WARRIOR':'CHOOSE YOUR FIGHTER'}</h1></div><div className="roster-count">{ROSTER.length}<span>WARRIORS</span></div></div><div className="selection-layout"><div className="roster-section"><div className="roster-toolbar"><span>ALL WARRIORS <small>{visible.length}</small></span><input aria-label="Search fighters" placeholder="Search warriors…" value={query} onChange={e=>{setQuery(e.target.value);setRosterPage(0);}}/></div><div className="roster-grid">{visible.slice(page*8,page*8+8).map(f=><Button key={f.id} variant="ghost" className="fighter-tile" data-active={fighter.id===f.id} onClick={()=>{setSelected(ROSTER.indexOf(f));setMovePage(0);sfx.select();}}><Portrait fighter={f}/><span>{f.name}</span>{f.id===fighter.id&&<Check className="selected-check"/>}</Button>)}</div><Pager page={page} total={pageCount} onChange={setRosterPage} label="Fighters"/></div><aside className="fighter-detail"><div className="fighter-showcase"><span className="fighter-index">{String(selected+1).padStart(2,'0')} / {ROSTER.length}</span><Portrait fighter={fighter}/><div className="fighter-name"><h2>{fighter.name}</h2><p>{fighter.title}</p></div></div><div className="fighter-attributes"><Stat value={fighter.hp} label="VITALITY"/><Stat value={Math.round(fighter.power*100)} label="POWER"/><Stat value={Math.round(fighter.speed*10)} label="AGILITY"/></div><span className="variant-label">{fighter.skinId?`${fighter.skinId.toUpperCase()} SKIN VARIANT`:""}</span><div className="move-tabs">{(['specials','combos','finishers'] as const).map(t=><Button variant="ghost" key={t} data-active={tab===t} onClick={()=>{setTab(t);setMovePage(0);}}>{t.toUpperCase()} {t!=='specials'&&<small>20</small>}</Button>)}</div><div className="move-list">{moves.slice(movePage*2,movePage*2+2).map(m=><div key={m.name}><span>{m.name}</span><kbd>{m.input}{m.advantage&&<small className="combo-advantage">{m.advantage}</small>}</kbd></div>)}</div><Pager page={movePage} total={Math.max(1,Math.ceil(moves.length/2))} onChange={setMovePage} label="Moves"/>{!archive&&<Button variant="game" className="fighter-confirm" onClick={()=>onPick(fighter)}>FIGHT AS {fighter.name}<ChevronRight/></Button>}</aside></div></section>;
 }
 function Versus({player,battle,step,total,onDone}:{player:FighterDef;battle:Battle;step:number;total:number;onDone:()=>void}){
- useEffect(()=>{sfx.gong();const id=setTimeout(onDone,2800);return()=>clearTimeout(id);},[onDone]);
- return <section className="versus-screen"><p className="eyebrow">{battle.stage} · {battle.arena.name}</p>{total>1&&<div className="stage-progress">{Array.from({length:total},(_,i)=><i key={i} data-active={i<=step}/>)}</div>}<div className="versus-line"><div><Portrait fighter={player}/><h2>{player.name}</h2><span>{player.title}</span></div><strong>VS</strong><div><Portrait fighter={battle.enemy}/><h2>{battle.enemy.name}</h2><span>{battle.enemy.title}</span></div></div><Button variant="game" onClick={onDone}>ENTER THE ARENA <Swords/></Button></section>;
+ const [ready,setReady]=useState(false);
+ useEffect(()=>{let active=true;sfx.gong();void Promise.all([warmFighter(player),warmFighter(battle.enemy),arenaImage(battle.arena).decode().catch(()=>{})]).then(()=>{if(active)setReady(true);});return()=>{active=false;};},[player,battle]);
+ useEffect(()=>{if(!ready)return;const id=setTimeout(onDone,650);return()=>clearTimeout(id);},[ready,onDone]);
+ return <section className="versus-screen"><p className="eyebrow">{battle.stage} · {battle.arena.name}</p>{total>1&&<div className="stage-progress">{Array.from({length:total},(_,i)=><i key={i} data-active={i<=step}/>)}</div>}<div className="versus-line"><div><Portrait fighter={player}/><h2>{player.name}</h2><span>{player.title}</span></div><strong>VS</strong><div><Portrait fighter={battle.enemy}/><h2>{battle.enemy.name}</h2><span>{battle.enemy.title}</span></div></div><Button variant="game" disabled={!ready} onClick={onDone}>ENTER THE ARENA <Swords/></Button></section>;
 }
 
 function Pager({page,total,onChange,label}:{page:number;total:number;onChange:(p:number)=>void;label:string}){return <nav className="game-pager" aria-label={`${label} pages`}><Button variant="ghost" size="icon" aria-label={`Previous ${label.toLowerCase()}`} disabled={page===0} onClick={()=>onChange(page-1)}><ChevronLeft/></Button><span>{page+1} / {total}</span><Button variant="ghost" size="icon" aria-label={`Next ${label.toLowerCase()}`} disabled={page+1>=total} onClick={()=>onChange(page+1)}><ChevronRight/></Button></nav>;}
