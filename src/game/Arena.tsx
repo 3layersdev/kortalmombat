@@ -270,8 +270,8 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       ctx.restore();
     };
 
-    const drawBg = () => {
-      if(background.complete && background.naturalWidth){ctx.drawImage(background,0,0,W,H);animateScenery(ctx,arena,frame,reducedMotion);return;}
+    const drawBg = (alpha:number) => {
+      if(background.complete && background.naturalWidth){ctx.drawImage(background,0,0,W,H);animateScenery(ctx,arena,frame+alpha,reducedMotion);return;}
       const g = ctx.createLinearGradient(0, 0, 0, GROUND);
       g.addColorStop(0, arena.sky[0]); g.addColorStop(1, arena.sky[1]);
       ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, GROUND + 20);
@@ -299,6 +299,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       for (let i = -8; i <= 8; i++) { ctx.beginPath(); ctx.moveTo(W / 2 + i * 60, GROUND); ctx.lineTo(W / 2 + i * 160, H); ctx.stroke(); }
       ctx.strokeStyle = arena.glow + "66"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, GROUND); ctx.lineTo(W, GROUND); ctx.stroke();
       if (arena.deco === "spikes") { ctx.fillStyle = "#000"; for (let x = 0; x < W; x += 24) { ctx.beginPath(); ctx.moveTo(x, H); ctx.lineTo(x + 12, H - 26); ctx.lineTo(x + 24, H); ctx.fill(); } }
+      animateScenery(ctx,arena,frame+alpha,reducedMotion);
     };
 
     const ambient = () => {
@@ -438,7 +439,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high";
       ctx.save();
       if (shake > 0) { ctx.translate((R() - 0.5) * shake, (R() - 0.5) * shake); shake *= 0.85; if (shake < 0.5) shake = 0; }
-      drawBg();
+      drawBg(alpha);
       ambient();
       if(phase==='ready'||phase==='finish'){ctx.fillStyle='rgba(0,0,0,.3)';ctx.fillRect(0,0,W,H);}
       if (bolt > 0) { ctx.fillStyle = `rgba(220,230,255,${bolt / 16})`; ctx.fillRect(0, 0, W, H); bolt--; }
