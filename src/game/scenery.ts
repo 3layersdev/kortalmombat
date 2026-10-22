@@ -29,8 +29,9 @@ export function animateScenery(ctx:CanvasRenderingContext2D,arena:ArenaDef,tick:
   // Fire tongues and reflected light remain anchored to the arena edges.
   if(arena.fx==='embers'||arena.fx==='ash') {
     const throne=arena.name==='Khaos Throne';
-    for(const x of throne?[138,822]:[94,864]) {
-      const ground=throne?346:366;
+    const courtyard=arena.fx==='ash';
+    for(const x of throne||courtyard?[94,864]:[56,904]) {
+      const ground=throne?286:courtyard?303:238;
       ctx.globalCompositeOperation='screen';
       const light=ctx.createRadialGradient(x,ground-22,2,x,ground-22,96);
       light.addColorStop(0,arena.glow);light.addColorStop(1,arena.glow+'00');
@@ -38,9 +39,9 @@ export function animateScenery(ctx:CanvasRenderingContext2D,arena:ArenaDef,tick:
       ctx.fillRect(x-96,ground-118,192,192);
       for(let i=0;i<4;i++) {
         const sway=Math.sin(t*(5+i)+x+i)*9;
-        const height=36+i*9+Math.sin(t*8+i+x)*12;
-        const width=17-i*3;
-        ctx.globalAlpha=.48+i*.1;ctx.fillStyle=i>1?arena.glow:arena.sky[1];
+        const height=25+i*6+Math.sin(t*8+i+x)*8;
+        const width=12-i*2;
+        ctx.globalAlpha=.14+i*.035;ctx.fillStyle=i>1?arena.glow:arena.sky[1];
         ctx.beginPath();ctx.moveTo(x-width,ground);
         ctx.bezierCurveTo(x-width-8,ground-25,x+sway-12,ground-height*.8,x+sway,ground-height);
         ctx.bezierCurveTo(x+sway+6,ground-height*.5,x+width+6,ground-18,x+width,ground);
@@ -111,16 +112,20 @@ export function animateScenery(ctx:CanvasRenderingContext2D,arena:ArenaDef,tick:
     }
   }
 
-  if(arena.fx==='ash'||arena.name==='Khaos Throne') {
-    // Cloth folds deform in the wind, anchored at their hanging crossbars.
-    for(const x of [48,888]) {
-      ctx.globalCompositeOperation='source-over';ctx.globalAlpha=.68;ctx.fillStyle=arena.sky[1];
-      ctx.beginPath();ctx.moveTo(x,82);ctx.lineTo(x+24,82);
-      for(let j=1;j<=6;j++)ctx.lineTo(x+24+Math.sin(t*2.2-j*.8)*j*1.7,82+j*15);
-      ctx.lineTo(x+11+Math.sin(t*2.2-4.8)*10,184);
-      for(let j=6;j>=1;j--)ctx.lineTo(x+Math.sin(t*2.2-j*.8)*j*1.7,82+j*15);
-      ctx.closePath();ctx.fill();
-      ctx.globalAlpha=.28;ctx.strokeStyle=arena.glow;ctx.lineWidth=1;ctx.stroke();
+  if(arena.fx==='ash') {
+    // Deform the painting's own hanging cloth, preserving its artwork rather
+    // than placing flat replacement banners over the scenery.
+    const image=arenaImage(arena);
+    if(image.complete&&image.naturalWidth) {
+      ctx.globalCompositeOperation='source-over';ctx.globalAlpha=1;
+      for(const [x,width] of [[142,130],[692,124]]) {
+        ctx.save();ctx.beginPath();ctx.rect(x,0,width,280);ctx.clip();
+        for(let y=0;y<280;y+=4) {
+          const sway=Math.sin(t*2.2-y*.025)*(y/280)*3;
+          ctx.drawImage(image,(x-4)*image.naturalWidth/960,y*image.naturalHeight/540,(width+8)*image.naturalWidth/960,4*image.naturalHeight/540,x-4+sway,y,width+8,4);
+        }
+        ctx.restore();
+      }
     }
   }
   ctx.restore();
