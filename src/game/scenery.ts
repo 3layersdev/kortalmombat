@@ -118,7 +118,7 @@ export function animateScenery(ctx:CanvasRenderingContext2D,arena:ArenaDef,tick:
     const image=arenaImage(arena);
     if(image.complete&&image.naturalWidth) {
       ctx.globalCompositeOperation='source-over';ctx.globalAlpha=1;
-      for(const [x,width] of [[142,130],[692,124]]) {
+      for(const [x,width] of [[142,130],[692,124]] as const) {
         ctx.save();ctx.beginPath();ctx.rect(x,0,width,280);ctx.clip();
         for(let y=0;y<280;y+=4) {
           const sway=Math.sin(t*2.2-y*.025)*(y/280)*3;
