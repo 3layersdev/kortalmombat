@@ -1,4 +1,5 @@
 # Kortal Mombat upgrade
+- [x] Animate fire, snowfall, ice reflections, storms, leafy stems and original banner artwork across all six arenas; verified frame-to-frame motion and a phone fight with no scroll or runtime errors, and all 15 combat tests pass.
 - [x] Add 48 skin-preserving articulated walk frames and four Vesper attack poses, six distinct animated arena paintings, early asset decoding and shorter introductions; 15 tests pass, live phone/desktop combat and all six paintings verified.
 - [x] Add upright dizzy finisher readiness, twelve skin-family signature cinematics and visible victim aftermath; full timed match, player-selected burial, final result and phone portrait/landscape fit verified; eleven tests pass.
 - [x] Fit every phone screen without scrolling, page all 62 fighters and moves, interpolate movement and blend poses; verified four phone sizes, portrait/landscape controls, and complete match results with seven passing tests.
