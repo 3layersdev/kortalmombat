@@ -116,7 +116,7 @@ export function animateScenery(ctx:CanvasRenderingContext2D,arena:ArenaDef,tick:
     }
   }
 
-  if(arena.fx==='ash') {
+  if(arena.fx==='ash'&&arena.name==='Blood Courtyard') {
     // Deform the painting's own hanging cloth, preserving its artwork rather
     // than placing flat replacement banners over the scenery.
     const image=arenaImage(arena);
