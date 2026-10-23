@@ -20,6 +20,10 @@ export const ARENAS: ArenaDef[] = [
   { name: "Jade Forest", sky: ["#03140b", "#1f5a33"], glow: "#c8ffb0", far: "#0b2a17", pillar: "#03100a", floor: "#16301d", fx: "leaves", deco: "trees" },
   { name: "Blood Courtyard", sky: ["#14030a", "#5a0d2a"], glow: "#ff6a8a", far: "#2a0614", pillar: "#0c0206", floor: "#2a0a14", fx: "ash", deco: "torches" },
   { name: "Khaos Throne", sky: ["#0a0300", "#4a2a00"], glow: "#ffd36a", far: "#241400", pillar: "#080400", floor: "#2a1a06", fx: "embers", deco: "torches" },
+  { name: "Sunken Catacomb", sky: ["#02110c", "#0f4a33"], glow: "#5aff9a", far: "#07231a", pillar: "#03100a", floor: "#0d2a1c", fx: "ash", deco: "pillars" },
+  { name: "Obsidian Shore", sky: ["#0d020a", "#3a0d2e"], glow: "#ff5a6a", far: "#1c0716", pillar: "#0a0208", floor: "#1c0d16", fx: "rain", deco: "spikes" },
+  { name: "Golden Dojo", sky: ["#1a0a02", "#6a3208"], glow: "#ffb04a", far: "#2e1606", pillar: "#120802", floor: "#33190a", fx: "leaves", deco: "torches" },
+  { name: "Nebula Rift", sky: ["#0a0216", "#3a1a6a"], glow: "#8ad8ff", far: "#180a30", pillar: "#0a0416", floor: "#1c1030", fx: "snow", deco: "towers" },
 ];
 
 export const FIGHTERS: FighterDef[] = [

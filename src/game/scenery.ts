@@ -4,9 +4,13 @@ import storm from '@/assets/storm-tower.jpg';
 import forest from '@/assets/jade-forest.jpg';
 import courtyard from '@/assets/blood-courtyard.jpg';
 import throne from '@/assets/khaos-throne.jpg';
+import catacomb from '@/assets/sunken-catacomb.jpg';
+import shore from '@/assets/obsidian-shore.jpg';
+import dojo from '@/assets/golden-dojo.jpg';
+import rift from '@/assets/nebula-rift.jpg';
 import type { ArenaDef } from './data';
 
-const scenes: Record<string,string> = {'The Ember Pit':ember,'Frozen Temple':ice,'Storm Tower':storm,'Jade Forest':forest,'Blood Courtyard':courtyard,'Khaos Throne':throne};
+const scenes: Record<string,string> = {'The Ember Pit':ember,'Frozen Temple':ice,'Storm Tower':storm,'Jade Forest':forest,'Blood Courtyard':courtyard,'Khaos Throne':throne,'Sunken Catacomb':catacomb,'Obsidian Shore':shore,'Golden Dojo':dojo,'Nebula Rift':rift};
 const images = new Map<string,HTMLImageElement>();
 export const arenaArt = (arena:ArenaDef) => scenes[arena.name] ?? ember;
 export function arenaImage(arena:ArenaDef) {
@@ -112,7 +116,7 @@ export function animateScenery(ctx:CanvasRenderingContext2D,arena:ArenaDef,tick:
     }
   }
 
-  if(arena.fx==='ash') {
+  if(arena.fx==='ash'&&arena.name==='Blood Courtyard') {
     // Deform the painting's own hanging cloth, preserving its artwork rather
     // than placing flat replacement banners over the scenery.
     const image=arenaImage(arena);
