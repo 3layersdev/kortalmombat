@@ -20,7 +20,7 @@ export function dailyGoals(day: string): DailyGoal[] {
   const combo = 3 + Math.floor(r() * 4);
   const modes = MODES.filter(m => m.id !== 'training');
   const m = modes[Math.floor(r() * modes.length)]!;
-  const hp = [50, 60, 70, 80][Math.floor(r() * 4)];
+  const hp = [50, 60, 70, 80][Math.floor(r() * 4)] ?? 60;
   const third: DailyGoal = r() < 0.5
     ? { id: `${day}-hp`, kind: 'flawless', label: `Win with ${hp}%+ health left`, reward: 200, target: hp }
     : { id: `${day}-mode`, kind: 'mode', label: `Win a fight in ${m.name}`, reward: 200, target: m.id };
