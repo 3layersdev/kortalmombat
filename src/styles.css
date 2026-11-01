@@ -62,3 +62,13 @@ html,body{height:100%;overflow:hidden;overscroll-behavior:none}
 .finishing-scene .finisher-picker select{flex:1;min-width:0;max-width:calc(100% - 96px)}
 .finishing-scene .round-announcement{white-space:normal;overflow-wrap:anywhere}
 @media(max-width:800px) and (orientation:portrait){.finishing-scene .arena-canvas{top:78px;height:calc(100% - 148px)}.finishing-scene .finisher-picker{bottom:20px}.finishing-scene .arena-caption{bottom:65px}}
+.daily-panel{flex:none;display:grid;gap:.25rem;padding:.4rem .6rem;border:1px solid color-mix(in oklch,var(--primary) 45%,transparent);background:color-mix(in oklch,var(--background) 72%,transparent);clip-path:polygon(8px 0,100% 0,calc(100% - 8px) 100%,0 100%);margin:.35rem 0}
+.daily-head{display:flex;justify-content:space-between;font-size:.7rem;letter-spacing:.14em;color:var(--primary);font-weight:800}
+.daily-koins{color:var(--foreground)}
+.daily-goal{display:flex;align-items:center;gap:.5rem;font-size:.72rem;min-height:1.6rem}
+.daily-goal.is-done .daily-label{color:var(--muted-foreground);text-decoration:line-through}
+.daily-check{width:1rem;height:1rem;flex:none;border:1px solid var(--primary);display:grid;place-items:center}
+.daily-check svg{width:.75rem;height:.75rem;color:var(--primary)}
+.daily-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.daily-reward{color:var(--primary);font-weight:700;font-size:.68rem}
+.daily-goal button{height:1.5rem;padding:0 .5rem;font-size:.62rem}
