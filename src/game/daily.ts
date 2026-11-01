@@ -16,10 +16,10 @@ function seeded(day: string) {
 /** Three deterministic goals per calendar day (UTC). */
 export function dailyGoals(day: string): DailyGoal[] {
   const r = seeded(day);
-  const f = ROSTER[Math.floor(r() * ROSTER.length)];
+  const f = ROSTER[Math.floor(r() * ROSTER.length)]!;
   const combo = 3 + Math.floor(r() * 4);
   const modes = MODES.filter(m => m.id !== 'training');
-  const m = modes[Math.floor(r() * modes.length)];
+  const m = modes[Math.floor(r() * modes.length)]!;
   const hp = [50, 60, 70, 80][Math.floor(r() * 4)];
   const third: DailyGoal = r() < 0.5
     ? { id: `${day}-hp`, kind: 'flawless', label: `Win with ${hp}%+ health left`, reward: 200, target: hp }
