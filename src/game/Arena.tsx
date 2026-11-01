@@ -215,7 +215,10 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       const basePose:Pose = phase === 'finish' && cinematic ? f === winner ? executionPose(cinematic.effect,phaseT) : victim?.pose ?? 'hit' : a === 'dizzy' ? 'idle' : a === "crouch" ? "crouch" : a === "win" ? "victory" : a === "special" && sp?.type === "uppercut" ? "uppercut" : a === "hit" || a === "ko" ? "hit" : a === "block" ? "block" : a === "punch" ? air ? "airpunch" : "strike" : a === "kick" ? air ? "airkick" : "kick" : a === "special" ? "strike" : air ? "jump" : a === "walk" ? "walk" : "idle";
       const pose=phase==='finish'?basePose:motionPose(basePose,visualFrame,f.t,f.d.skinId??f.d.id);
       if(pose!==f.pose){f.priorPose=f.pose;f.pose=pose;f.poseAt=now;}
-      const blend=Math.min(1,(now-f.poseAt)/85);
+      const fastPose=["strike","kick","uppercut","airpunch","airkick","hit"].includes(pose);
+      const rawBlend=Math.min(1,(now-f.poseAt)/(fastPose?55:110));
+      const blend=rawBlend*rawBlend*(3-2*rawBlend);
+      const ft=Math.max(0,f.t-(hitstop>0?0:alpha));
       const strike = ["strike","kick","uppercut","airpunch","airkick","punchwind","punchrecover","kickwind","kickrecover"].includes(pose);
       const img = spriteImg(f.d.skinId ?? f.d.id, pose);
       ctx.save();
@@ -330,6 +333,8 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
 
     const update = () => {
       for(const f of [p1,p2]){f.px=f.x;f.py=f.y;}
+      if(shake>0){shake*=0.86;if(shake<0.4)shake=0;}
+      if(hitstop>0&&phase==="fight"){hitstop--;return;}
       frame++; phaseT++;
       const K = keys.current;
       if(K.finish!==undefined){const index=Number(K.finish);delete K.finish;beginFinish(index);}
@@ -438,7 +443,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       ctx.clearRect(0,0,W,H);
       ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high";
       ctx.save();
-      if (shake > 0) { ctx.translate((R() - 0.5) * shake, (R() - 0.5) * shake); shake *= 0.85; if (shake < 0.5) shake = 0; }
+      if (shake > 0) { const st=now*0.055; ctx.translate(Math.sin(st*1.7)*shake*0.6+Math.sin(st*3.1)*shake*0.25, Math.cos(st*2.3)*shake*0.45); }
       drawBg(alpha);
       ambient();
       if(phase==='ready'||phase==='finish'){ctx.fillStyle='rgba(0,0,0,.3)';ctx.fillRect(0,0,W,H);}
