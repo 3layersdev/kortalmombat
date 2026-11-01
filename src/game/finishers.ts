@@ -71,7 +71,7 @@ const signatures: Record<string, { name: string; effect: FinishEffect; aftermath
 export function signatureFor(fighter: FighterDef) {
   const signature = signatures[fighter.id];
   if (!signature) throw new Error(`Missing finisher signature for ${fighter.id}`);
-  return { ...signature, name: fighter.skinId ? `${fighter.name} ${signature.name}` : signature.name, color: fighter.specials[0]?.color ?? fighter.color };
+  return { ...signature, color: fighter.specials[0]?.color ?? fighter.color };
 }
 const clamp = (n: number) => Math.max(0, Math.min(1, n));
 export function finishStage(tick: number): 'windup' | 'execution' | 'aftermath' | 'complete' {
