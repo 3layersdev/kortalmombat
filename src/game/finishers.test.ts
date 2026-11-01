@@ -12,6 +12,12 @@ describe('signature finishers', () => {
     }
     expect(new Set(ROSTER.filter(f=>!f.skinId).map(f=>signatureFor(f).effect)).size).toBe(12);
   });
+  it('gives every fighter a unique signature name and aftermath', () => {
+    const names = ROSTER.map(f => signatureFor(f).name);
+    const aftermaths = ROSTER.map(f => signatureFor(f).aftermath);
+    expect(new Set(names).size).toBe(ROSTER.length);
+    expect(new Set(aftermaths).size).toBe(ROSTER.length);
+  });
   it('keeps the victim upright and swaying before execution', () => {
     const a = victimVisual('ice', 0), b = victimVisual('ice', 15);
     expect(a.pose).toBe('idle'); expect(b.pose).toBe('idle');
