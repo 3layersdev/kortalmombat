@@ -11,7 +11,7 @@ const W = 960, H = 540, GROUND = 470, GRAV = 0.9;
 type Act = "idle" | "walk" | "punch" | "kick" | "block" | "hit" | "ko" | "special" | "win" | "crouch" | "dizzy";
 interface F {
   d: FighterDef; x: number; y: number; px: number; py: number; pose: Pose; priorPose: Pose; poseAt: number; vx: number; vy: number; hp: number; face: number; act: Act; t: number;
-  level: string; hit: boolean; frozen: number; spCd: number; buf: { k: string; f: number }[]; spec: Special | null; combo: number; lastHit: number;
+  level: string; land: number; hit: boolean; frozen: number; spCd: number; buf: { k: string; f: number }[]; spec: Special | null; combo: number; lastHit: number;
 }
 interface Proj { x: number; y: number; vx: number; owner: F; dmg: number; color: string; freeze: boolean; life: number; wave: boolean }
 interface Part { x: number; y: number; vx: number; vy: number; life: number; max: number; color: string; size: number }
@@ -100,7 +100,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
         sfx.block(); burst(hx, hy, "#9ad8ff", 8, 4); float(d.x, d.y - 200, "BLOCK", "#9ad8ff", 22);
         return;
       }
-      d.hp = Math.max(0, d.hp - dmg); d.act = "hit"; d.t = o.heavy ? 22 : 15; d.vx = a.face * kb; d.spec = null;
+      d.hp = Math.max(0, d.hp - dmg); d.face = -a.face; a.vx += a.face * 1.5; d.act = "hit"; d.t = o.heavy ? 22 : 15; d.vx = a.face * kb; d.spec = null;
       if (o.launch) d.vy = -12;
       if (o.freeze) { d.frozen = 75; sfx.freeze(); }
       if(a===p1){matchStats.damage += dmg; matchStats.hits++;}
@@ -204,7 +204,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       if (!busy(f)) {
         f.act = ai.block && f.y >= GROUND ? "block" : "idle";
         if (dist < 120 && ai.move === (o.x < f.x ? -1 : 1)) ai.move = 0;
-        if (!ai.block && ai.move) { f.x += ai.move * f.d.speed * 0.9; if (f.y >= GROUND) f.act = "walk"; }
+        if (!ai.block && ai.move) { f.vx += (ai.move * f.d.speed * 0.9 - f.vx) * 0.3; if (f.y >= GROUND) f.act = "walk"; }
       }
     };
 
@@ -239,6 +239,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       if (a === 'dizzy') { rot = Math.sin(visualFrame*.09)*.065; ox = Math.sin(visualFrame*.09)*8; oy = Math.cos(visualFrame*.18)*2; }
       if (victim) { rot = victim.rotation; ox = victim.offsetX; oy = victim.offsetY; }
       if (a === "win") { sy = 1.04 + Math.sin(visualFrame * 0.08) * 0.008; }
+      if (f.land > 0 && !air) { const lk = f.land / 8; sy *= 1 - 0.07 * lk; sx *= 1 + 0.05 * lk; }
       if (air && a !== "ko") { rot += f.vy < 0 ? -0.08 : 0.06; sy *= 0.96; }
       if (a === "special" && sp?.type === "uppercut") rot = -0.35;
       if (a === "special" && sp?.type === "dash") rot = 0.18;
@@ -368,7 +369,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
           p1.act = blk ? "block" : K.s && p1.y>=GROUND ? "crouch" : "idle";
           if (!blk) {
             const m = (K.d ? 1 : 0) - (K.a ? 1 : 0);
-            if (m && !K.s) { p1.x += m * p1.d.speed; if (p1.y >= GROUND) p1.act = "walk"; }
+            if (m && !K.s) { p1.vx += (m * p1.d.speed - p1.vx) * (p1.y >= GROUND ? 0.35 : 0.08); if (p1.y >= GROUND) p1.act = "walk"; }
             if (K.w && p1.y >= GROUND) p1.vy = -p1.d.jump;
           }
         }
@@ -378,8 +379,11 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       runAI();
       for (const f of [p1, p2]) {
         updAttack(f); updSpecial(f);
-        f.vy += GRAV; f.y += f.vy; if (f.y >= GROUND) { f.y = GROUND; f.vy = 0; }
-        f.x += f.vx; f.vx *= 0.82; if (Math.abs(f.vx) < 0.1) f.vx = 0;
+        const airborne = f.y < GROUND;
+        f.vy += airborne ? (Math.abs(f.vy) < 3 ? GRAV * 0.6 : f.vy > 0 ? GRAV * 1.25 : GRAV) : 0; f.y += f.vy;
+        if (f.y >= GROUND) { if (airborne && f.vy > 6) { f.land = 8; burst(f.x, GROUND, "#b8a58a", 6, 2.5); } f.y = GROUND; f.vy = 0; }
+        if (f.land > 0) f.land--;
+        f.x += f.vx; f.vx *= f.y < GROUND ? 0.97 : f.act === "walk" ? 0.9 : 0.8; if (Math.abs(f.vx) < 0.1) f.vx = 0;
         f.x = Math.max(110, Math.min(W - 110, f.x));
         if (f.spCd > 0) f.spCd--;
         if (f.frozen > 0) f.frozen--;
