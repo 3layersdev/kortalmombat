@@ -91,7 +91,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       banner = ''; bannerSub = ''; sfx.special(selected.effect);
     };
 
-    const applyHit = (a: F, d: F, base: number, kb: number, o: { launch?: boolean; freeze?: boolean; heavy?: boolean } = {}) => {
+    const applyHit = (a: F, d: F, base: number, kb: number, o: { launch?: boolean; freeze?: boolean; heavy?: boolean; kick?: boolean } = {}) => {
       if (d.act === "ko" || phase !== "fight") return;
       let dmg = Math.min(18, base * Math.max(.35,1-a.combo*.08)) * a.d.power * (a === p2 ? 0.7 + difficulty * 0.4 : 1);
       const hx = d.x - a.face * 15, hy = d.y - 110 * (d.d.scale ?? 1);
@@ -198,7 +198,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
           if (dist > 140) ai.move = o.x < f.x ? -1 : 1;
           else if (r < 0.55) attack(f, R() < 0.55 ? "punch" : "kick");
           else if (r < 0.65) ai.move = o.x < f.x ? 1 : -1;
-          else if (r < 0.7 && f.y >= GROUND) f.vy = -f.d.jump;
+          else if (r < 0.7 && f.y >= GROUND) { f.vy = -f.d.jump; sfx.jump(); }
         }
       }
       if (!busy(f)) {
