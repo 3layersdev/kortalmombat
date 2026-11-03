@@ -55,7 +55,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
     const parts: Part[] = [], txts: Txt[] = [], amb: Part[] = [];
     let round = 1, w1 = 0, w2 = 0, timer = roundSeconds * 60, phase: "intro" | "fight" | "ko" | "draw" | "ready" | "finish" | "end" = "intro", phaseT = 0;
     let cinematic: ReturnType<typeof finishersFor>[number] | null = null;
-    let banner = "", bannerSub = "", shake = 0, flash = 0, winner: F | null = null, flawless = false, bolt = 0, finisherUsed = false;
+    let banner = "", bannerSub = "", hitstop = 0, shake = 0, flash = 0, winner: F | null = null, flawless = false, bolt = 0, finisherUsed = false;
     const prev: Record<string, boolean> = {};
     const ai = { move: 0, block: false, next: 0 };
 
@@ -96,7 +96,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       let dmg = Math.min(18, base * Math.max(.35,1-a.combo*.08)) * a.d.power * (a === p2 ? 0.7 + difficulty * 0.4 : 1);
       const hx = d.x - a.face * 15, hy = d.y - 110 * (d.d.scale ?? 1);
       if (d.act === "block") {
-        dmg *= 0.15; d.hp = Math.max(0, d.hp - dmg); d.vx = a.face * 5;
+        hitstop = 2; dmg *= 0.15; d.hp = Math.max(0, d.hp - dmg); d.vx = a.face * 5;
         sfx.block(); burst(hx, hy, "#9ad8ff", 8, 4); float(d.x, d.y - 200, "BLOCK", "#9ad8ff", 22);
         return;
       }
@@ -109,7 +109,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       if (a.combo >= 2) float(a.x, a.y - 240, `${a.combo} HIT COMBO`, "#ffd36a", 30);
       float(d.x + (R() - 0.5) * 30, d.y - 180, `-${Math.round(dmg)}`, "#ff5a3a", 26);
       if (o.heavy) sfx.kick(); else sfx.punch();
-      shake = o.heavy ? 10 : 6;
+      shake = o.heavy ? 9 : 5; hitstop = o.heavy ? 5 : 3;
       burst(hx, hy, "#ffb04a", 16, 7); burst(hx, hy, "#c81a1a", 10, 4);
     };
 
@@ -230,12 +230,12 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       let rot = 0, sx = 1, sy = 1, ox = 0, oy = 0;
       if (a === "idle") sy = 1 + Math.sin(visualFrame * 0.065) * 0.008;
       if (a === "walk") { oy = -Math.abs(Math.sin(visualFrame * 0.22)) * 3; rot = Math.sin(visualFrame * 0.22) * 0.018; sx = 1 + Math.sin(visualFrame * 0.22) * 0.015; }
-      if (a === "punch") { const k = Math.sin(((16 - f.t) / 16) * Math.PI); ox = k * 14; }
-      if (a === "kick") { const k = Math.sin(((22 - f.t) / 22) * Math.PI); rot = -0.05 * k; ox = k * 10; }
+      if (a === "punch") { const k = Math.sin(((16 - ft) / 16) * Math.PI); ox = k * k * 16; }
+      if (a === "kick") { const k = Math.sin(((22 - ft) / 22) * Math.PI); rot = -0.06 * k; ox = k * k * 12; }
       if(a === "crouch"){ sx=1.02; }
       if(f.level.startsWith("L") && (a==="punch" || a==="kick")){sy=.78;rot=.1;}
       if (a === "block") { ox = -4; }
-      if (a === "hit") { rot = -0.06; ox = -10; }
+      if (a === "hit") { const hk=Math.min(1,ft/12); const e=hk*hk*(3-2*hk); rot = -0.09*e; ox = -14*e; oy = -3*e; sx = 1-0.04*e; }
       if (a === 'dizzy') { rot = Math.sin(visualFrame*.09)*.065; ox = Math.sin(visualFrame*.09)*8; oy = Math.cos(visualFrame*.18)*2; }
       if (victim) { rot = victim.rotation; ox = victim.offsetX; oy = victim.offsetY; }
       if (a === "win") { sy = 1.04 + Math.sin(visualFrame * 0.08) * 0.008; }
