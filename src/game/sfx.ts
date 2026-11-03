@@ -54,8 +54,10 @@ function tone(f1: number, f2: number, dur: number, type: OscillatorType, gain: n
 
 export const sfx = {
   unlock: () => { ac(); },
-  punch: () => { noise(0.08, 1800, 0.6); tone(180, 60, 0.09, "square", 0.25); },
-  kick: () => { noise(0.16, 900, 0.8); tone(130, 35, 0.18, "sine", 0.7); },
+  punch: () => { const v = 0.9 + Math.random() * 0.2; noise(0.07, 2200 * v, 0.55); tone(200 * v, 60, 0.08, "square", 0.22); tone(95 * v, 45, 0.1, "sine", 0.4); },
+  kick: () => { const v = 0.9 + Math.random() * 0.2; noise(0.15, 850 * v, 0.75); tone(125 * v, 32, 0.2, "sine", 0.75); noise(0.05, 3200, 0.2, "highpass"); },
+  jump: () => { noise(0.1, 1100, 0.14, "bandpass"); tone(220, 420, 0.09, "triangle", 0.06); },
+  land: (heavy = false) => { noise(heavy ? 0.14 : 0.08, 500, heavy ? 0.45 : 0.28); tone(90, 40, heavy ? 0.16 : 0.1, "sine", heavy ? 0.5 : 0.3); },
   block: () => { tone(1500, 900, 0.07, "square", 0.15); noise(0.05, 4000, 0.3, "highpass"); },
   whoosh: () => noise(0.12, 700, 0.18, "bandpass"),
   freeze: () => { tone(2400, 800, 0.4, "triangle", 0.15); noise(0.3, 5000, 0.2, "highpass"); },

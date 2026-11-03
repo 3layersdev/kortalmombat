@@ -108,7 +108,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       if(a===p1)matchStats.bestCombo=Math.max(matchStats.bestCombo,a.combo);
       if (a.combo >= 2) float(a.x, a.y - 240, `${a.combo} HIT COMBO`, "#ffd36a", 30);
       float(d.x + (R() - 0.5) * 30, d.y - 180, `-${Math.round(dmg)}`, "#ff5a3a", 26);
-      if (o.heavy) sfx.kick(); else sfx.punch();
+      if (o.kick ?? o.heavy) sfx.kick(); else sfx.punch();
       shake = o.heavy ? 9 : 5; hitstop = o.heavy ? 5 : 3;
       burst(hx, hy, "#ffb04a", 16, 7); burst(hx, hy, "#c81a1a", 10, 4);
     };
@@ -158,7 +158,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       const reach = (f.act === "punch" ? 140 : 160) * s, dx = (o.x - f.x) * f.face;
       if (dx > 0 && dx < reach && Math.abs(o.y - f.y) < 120) {
         f.hit = true;
-        applyHit(f, o, f.level === "LP" ? 4 : f.level === "LK" ? 5 : f.act === "punch" ? 6 : 8, f.act === "punch" ? 7 : 12, { heavy: f.act === "kick" });
+        applyHit(f, o, f.level === "LP" ? 4 : f.level === "LK" ? 5 : f.act === "punch" ? 6 : 8, f.act === "punch" ? 7 : 12, { heavy: f.act === "kick", kick: f.act === "kick" });
       }
     };
     const updSpecial = (f: F) => {
@@ -370,7 +370,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
           if (!blk) {
             const m = (K.d ? 1 : 0) - (K.a ? 1 : 0);
             if (m && !K.s) { p1.vx += (m * p1.d.speed - p1.vx) * (p1.y >= GROUND ? 0.35 : 0.08); if (p1.y >= GROUND) p1.act = "walk"; }
-            if (K.w && p1.y >= GROUND) p1.vy = -p1.d.jump;
+            if (K.w && p1.y >= GROUND) { p1.vy = -p1.d.jump; sfx.jump(); }
           }
         }
       }
@@ -381,7 +381,8 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
         updAttack(f); updSpecial(f);
         const airborne = f.y < GROUND;
         f.vy += airborne ? (Math.abs(f.vy) < 3 ? GRAV * 0.6 : f.vy > 0 ? GRAV * 1.25 : GRAV) : 0; f.y += f.vy;
-        if (f.y >= GROUND) { if (airborne && f.vy > 6) { f.land = 8; burst(f.x, GROUND, "#b8a58a", 6, 2.5); } f.y = GROUND; f.vy = 0; }
+        if (f.y >= GROUND) { if (airborne && f.vy > 3) sfx.land(f.vy > 14);
+        if (airborne && f.vy > 6) { f.land = 8; burst(f.x, GROUND, "#b8a58a", 6, 2.5); } f.y = GROUND; f.vy = 0; }
         if (f.land > 0) f.land--;
         f.x += f.vx; f.vx *= f.y < GROUND ? 0.97 : f.act === "walk" ? 0.9 : 0.8; if (Math.abs(f.vx) < 0.1) f.vx = 0;
         f.x = Math.max(110, Math.min(W - 110, f.x));
