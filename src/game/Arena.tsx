@@ -228,10 +228,10 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       const h = (pose === "crouch" ? 150 : 215) * s, w = (img.naturalWidth / img.naturalHeight) * h;
       const ax = pose === "kick" ? 0.3 : strike ? 0.36 : 0.5;
       let rot = 0, sx = 1, sy = 1, ox = 0, oy = 0;
-      if (a === "idle") sy = 1 + Math.sin(visualFrame * 0.065) * 0.008;
+      if (a === "idle") { const br = Math.sin(visualFrame * 0.065); sy = 1 + br * 0.012; sx = 1 - br * 0.004; rot = Math.sin(visualFrame * 0.031) * 0.008; }
       if (a === "walk") { oy = -Math.abs(Math.sin(visualFrame * 0.22)) * 3; rot = Math.sin(visualFrame * 0.22) * 0.018; sx = 1 + Math.sin(visualFrame * 0.22) * 0.015; }
-      if (a === "punch") { const k = Math.sin(((16 - ft) / 16) * Math.PI); ox = k * k * 16; }
-      if (a === "kick") { const k = Math.sin(((22 - ft) / 22) * Math.PI); rot = -0.06 * k; ox = k * k * 12; }
+      if (a === "punch") { const pr = (16 - ft) / 16, k = Math.sin(pr * Math.PI); ox = pr < 0.2 ? -pr * 20 : k * k * 18; rot = pr < 0.2 ? 0.03 : -0.03 * k; }
+      if (a === "kick") { const pr = (22 - ft) / 22, k = Math.sin(pr * Math.PI); rot = pr < 0.25 ? 0.05 * pr * 4 : -0.08 * k; ox = pr < 0.25 ? -pr * 24 : k * k * 14; oy = -k * 4; }
       if(a === "crouch"){ sx=1.02; }
       if(f.level.startsWith("L") && (a==="punch" || a==="kick")){sy=.78;rot=.1;}
       if (a === "block") { ox = -4; }
@@ -240,6 +240,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       if (victim) { rot = victim.rotation; ox = victim.offsetX; oy = victim.offsetY; }
       if (a === "win") { sy = 1.04 + Math.sin(visualFrame * 0.08) * 0.008; }
       if (f.land > 0 && !air) { const lk = f.land / 8; sy *= 1 - 0.07 * lk; sx *= 1 + 0.05 * lk; }
+      if ((a === "walk" || a === "idle") && !air) rot += Math.max(-0.05, Math.min(0.05, f.vx * f.face * 0.008));
       if (air && a !== "ko") { rot += f.vy < 0 ? -0.08 : 0.06; sy *= 0.96; }
       if (a === "special" && sp?.type === "uppercut") rot = -0.35;
       if (a === "special" && sp?.type === "dash") rot = 0.18;
@@ -263,6 +264,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
         ctx.globalAlpha = 1;
       }
       ctx.filter = filters.join(" ") || "none";
+      if ((a === "punch" || a === "kick") && !reducedMotion) { const pk = Math.sin(((a === "punch" ? 16 : 22) - ft) / (a === "punch" ? 16 : 22) * Math.PI); if (pk > 0.6) { ctx.globalAlpha = (pk - 0.6) * 0.45 * (victim?.opacity ?? 1); ctx.drawImage(img, -w * ax - 18, -h, w, h); ctx.globalAlpha = 1; } }
       if(blend<1){const prior=spriteImg(f.d.skinId??f.d.id,f.priorPose);if(prior.complete&&prior.naturalWidth){const ph=(f.priorPose==="crouch"?150:215)*s,pw=prior.naturalWidth/prior.naturalHeight*ph;ctx.globalAlpha=(1-blend)*(victim?.opacity??1);ctx.drawImage(prior,-pw*ax,-ph,pw,ph);}}
       ctx.globalAlpha=blend*(victim?.opacity??1);ctx.drawImage(img, -w * ax, -h, w, h);ctx.globalAlpha=1;
       ctx.filter = "none";
