@@ -18,7 +18,7 @@ interface Part { x: number; y: number; vx: number; vy: number; life: number; max
 interface Txt { x: number; y: number; text: string; life: number; color: string; size: number }
 
 const mk = (d: FighterDef, x: number, face: number): F => ({
-  d, x, y: GROUND, px: x, py: GROUND, pose: "idle", priorPose: "idle", poseAt: 0, vx: 0, vy: 0, hp: d.hp, face, act: "idle", t: 0, level: "HP", hit: false, frozen: 0, spCd: 0, buf: [], spec: null, combo: 0, lastHit: -999,
+  d, x, y: GROUND, px: x, py: GROUND, pose: "idle", priorPose: "idle", poseAt: 0, vx: 0, vy: 0, hp: d.hp, face, act: "idle", t: 0, level: "HP", land: 0, hit: false, frozen: 0, spCd: 0, buf: [], spec: null, combo: 0, lastHit: -999,
 });
 const R = Math.random;
 
@@ -551,6 +551,7 @@ function Bar({ hp, name, wins, right }: { hp: number; name: string; wins: number
         {[0, 1].map((i) => <span key={i} className={`h-3 w-3 rotate-45 border border-primary ${i < wins ? "bg-primary" : "bg-transparent"}`} />)}
       </div>
       <div className="health-track">
+        <div className={`health-lag ${right ? "right-0" : "left-0"}`} style={{ width: `${Math.max(0, hp)}%` }} />
         <div className={`health-fill ${right ? "ml-auto" : ""}`} style={{ width: `${Math.max(0, hp)}%` }} />
       </div>
     </div>
