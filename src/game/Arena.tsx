@@ -264,6 +264,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
         ctx.globalAlpha = 1;
       }
       ctx.filter = filters.join(" ") || "none";
+      if(blend<1){const prior=spriteImg(f.d.skinId??f.d.id,f.priorPose);if(prior.complete&&prior.naturalWidth){const ph=(f.priorPose==="crouch"?150:215)*s,pw=prior.naturalWidth/prior.naturalHeight*ph;ctx.globalAlpha=(1-blend)*0.5*(victim?.opacity??1);ctx.drawImage(prior,-pw*ax,-ph,pw,ph);}}
       ctx.globalAlpha=(victim?.opacity??1);ctx.drawImage(img, -w * ax, -h, w, h);ctx.globalAlpha=1;
       ctx.filter = "none";
       if (a === "block") {
