@@ -71,7 +71,7 @@ export const BOSS: FighterDef = {
 export const inputLabel = (i: string[]) =>
   i.map((k) => ({ d: "↓", f: "→", b: "←", u: "↑", P: "P", K: "K" })[k] ?? k).join(" ");
 
-export type GameMode = "quick" | "tournament" | "competition" | "survival" | "timeattack" | "training";
+export type GameMode = "quick" | "tournament" | "competition" | "survival" | "timeattack" | "training" | "online" | "duel";
 export const MODES: {id: GameMode; name: string; detail: string; tag: string}[] = [
  {id:"quick",name:"QUICK FIGHT",detail:"One rival. Best of three.",tag:"VERSUS"},
  {id:"tournament",name:"THE TOURNAMENT",detail:"16 stages to claim the throne.",tag:"CAMPAIGN"},
@@ -79,6 +79,8 @@ export const MODES: {id: GameMode; name: string; detail: string; tag: string}[] 
  {id:"survival",name:"SURVIVAL",detail:"Carry your health into the next fight.",tag:"ENDURANCE"},
  {id:"timeattack",name:"TIME ATTACK",detail:"30-second rounds. No second chances.",tag:"SPEED"},
  {id:"training",name:"TRAINING",detail:"A passive rival. Unlimited practice.",tag:"PRACTICE"},
+ {id:"online",name:"ONLINE TOURNAMENT",detail:"Your own 8-stage bracket vs real players' fighters.",tag:"MULTIPLAYER"},
+ {id:"duel",name:"PRIVATE LOBBY",detail:"Share a code. Duel a friend.",tag:"FRIENDS"},
 ];
 const names = ["ASHEN","CINDER","VEX","ONYX","NYX","SOLARIS","TEMPEST","ZENITH","REVENANT","KIRA","RAVEN","TALON","RIFT","EMBER","SABLE","ORION","VALKYR","HAVOC","STORM","BLAZE","SHIVER","VOLT","ECHO","DREAD","JADE","RAZE","AKIRA","NOVA","VULCAN","SPECTRE","KOBRA","RUSH","IVORY","AZURA","KAZAN","MORROW","STRIX","FANG","WARDEN","VIGIL","NOX","FURY","SAKURA","KRYO","HOLLOW","TITAN","RUNE","ZEAL","VENOM","INFERNA"];
 export const EXPANDED_FIGHTERS: FighterDef[] = names.map((name,i) => {

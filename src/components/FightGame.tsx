@@ -7,12 +7,18 @@ import {ARENAS,BOSS,ROSTER,MODES,combosFor,finishersFor,inputLabel,type FighterD
 import {fighterSprite,skinClass,warmFighter} from '@/game/sprites';
 import {arenaImage,warmScenery} from '@/game/scenery';
 import {sfx,setMuted,sceneMusic} from '@/game/sfx';
+import {Globe,Users} from 'lucide-react';
+import {buildBracket,cleanName,duelWinner,ONLINE_STAGES,type DuelResult} from '@/game/online';
+import {findRivals,recordRun,createLobby,joinLobby,getLobby,submitDuel} from '@/game/online.functions';
 import {dayKey,dailyGoals,completedBy,loadProgress,saveProgress,claim,type DailyProgress} from '@/game/daily';
 
-type Screen='intro'|'menu'|'select'|'vs'|'fight'|'result'|'moves';
+type Screen='intro'|'menu'|'select'|'vs'|'fight'|'result'|'moves'|'lobby';
 interface Battle {enemy:FighterDef;arena:ArenaDef;difficulty:number;stage:string;challenge:string}
+interface Lobby {code:string;host_name:string;host_fighter:string;host_result:unknown;guest_name:string|null;guest_fighter:string|null;guest_result:unknown}
 const first = ROSTER[0];
-const icons=[Swords,Trophy,Shield,Flame,Timer,Target];
+const icons=[Swords,Trophy,Shield,Flame,Timer,Target,Globe,Users];
+const byId=(id?:string|null)=>ROSTER.find(f=>f.id===id);
+const pickArena=()=>ARENAS[Math.floor(Math.random()*ARENAS.length)]??ARENAS[0]!;
 const emptyStats:MatchStats={rounds:'0 — 0',damage:0,hits:0,bestCombo:0,remainingHealth:100,time:0};
 export function FightGame(){
  const [screen,setScreen]=useState<Screen>('intro');const [mode,setMode]=useState<GameMode>('quick');
@@ -28,12 +34,26 @@ export function FightGame(){
  const mute=()=>setM(m=>{setMuted(!m);return !m;});
  const enter=()=>{sfx.unlock();sfx.gong();setScreen('menu');};
  useEffect(()=>{const h=(e:KeyboardEvent)=>{if(screen==='intro' && (e.key==='Enter'||e.key===' '))enter();if(e.key.toLowerCase()==='m')mute();};window.addEventListener('keydown',h);return()=>window.removeEventListener('keydown',h);},[screen]);
- function start(f:FighterDef){
+ const [name,setName]=useState('');const [lobby,setLobby]=useState<Lobby|null>(null);const [joinCode,setJoinCode]=useState('');const [intent,setIntent]=useState<'create'|'join'>('create');const [busy,setBusy]=useState(false);const [netErr,setNetErr]=useState('');
+ useEffect(()=>{setName(localStorage.getItem('kortal-name')??'');},[]);
+ const saveName=(v:string)=>{const n=cleanName(v);setName(n);localStorage.setItem('kortal-name',n);};
+ const net=async<T,>(fn:()=>Promise<T>):Promise<T|undefined>=>{setBusy(true);setNetErr('');try{return await fn();}catch(e){setNetErr(e instanceof Error?e.message:'Connection failed');return undefined;}finally{setBusy(false);}};
+ const myRole=lobby?(lobby.host_name===name?'host':'guest'):null;
+ function fightDuel(){if(!lobby||!myRole)return;const me=byId(myRole==='host'?lobby.host_fighter:lobby.guest_fighter);const foe=byId(myRole==='host'?lobby.guest_fighter:lobby.host_fighter);const rival=myRole==='host'?lobby.guest_name:lobby.host_name;if(!me||!foe)return;
+  setMode('duel');setPlayer(me);setBattles([{enemy:foe,arena:pickArena(),difficulty:.6,stage:`DUEL · VS ${rival}`,challenge:`LOBBY ${lobby.code}`}]);setStep(0);setCarry(100);setScreen('vs');sfx.confirm();}
+ async function start(f:FighterDef){
+  if(mode==='online'){const real=await net(()=>findRivals({data:{name}}));if(!real)return;const ids=ROSTER.filter(x=>!x.boss&&x.id!==f.id).map(x=>x.id);const bracket=buildBracket(real.filter(r=>byId(r.fighterId)),ids);
+   const list:Battle[]=bracket.map((g,i)=>({enemy:byId(g.fighterId)??f,arena:ARENAS[(i*3)%ARENAS.length]!,difficulty:Math.min(.85,.35+i*.05+g.wins*.02),stage:`ONLINE ${i+1} / ${ONLINE_STAGES} · VS ${g.name}`,challenge:g.bot?'BOT OPPONENT':`PLAYER · ${g.wins} WINS`}));
+   setPlayer(f);setBattles(list);setStep(0);setCarry(100);setPoints(0);setScreen('vs');sfx.confirm();return;}
+  if(mode==='duel'){const row=await net(()=>intent==='create'?createLobby({data:{name,fighterId:f.id}}):joinLobby({data:{code:joinCode,name,fighterId:f.id}}));if(row){setLobby(row as Lobby);setScreen('lobby');}return;}
   const foes=ROSTER.filter(x=>x.id!==f.id && !x.boss);const count=mode==='tournament'?16:mode==='competition'?8:mode==='survival'?30:1;
   const list:Battle[]=Array.from({length:count},(_,i)=>{const enemy=mode==='tournament'&&i===15?BOSS:foes[(i*7+Math.floor(Math.random()*foes.length))%foes.length];const arena=ARENAS[i%ARENAS.length];if(!enemy||!arena)throw new Error('Missing battle');return{enemy,arena,difficulty:mode==='training'?0:Math.min(.85,.28+i*.035),stage:mode==='tournament'?i===15?'FINAL BOSS':`STAGE ${i+1} / 16`:mode==='competition'?`LEAGUE MATCH ${i+1} / 8`:mode==='survival'?`WAVE ${i+1}`:mode==='timeattack'?'TIME ATTACK':'ROUND ONE',challenge:mode==='competition'?['STANDARD RULES','60 SECOND ROUNDS','HEAVYWEIGHT RIVAL','30 SECOND BLITZ'][i%4]??'':mode==='survival'?'PERSISTENT HEALTH':''};});
   setPlayer(f);setBattles(list);setStep(0);setCarry(100);setPoints(0);setScreen('vs');sfx.confirm();
  }
- function ended(w:boolean,s:MatchStats){setWon(w);setStats(s);if(player){const ids=completedBy(goals,w,s,player.id,mode).filter(i=>!daily.done.includes(i));if(ids.length)updDaily({...daily,done:[...daily.done,...ids]});}if(w){setPoints(p=>p+1000+s.remainingHealth*10+s.bestCombo*100);if(mode==='survival')setCarry(Math.max(15,s.remainingHealth));}setScreen('result');}
+ function ended(w:boolean,s:MatchStats){setWon(w);setStats(s);if(player){const ids=completedBy(goals,w,s,player.id,mode).filter(i=>!daily.done.includes(i));if(ids.length)updDaily({...daily,done:[...daily.done,...ids]});}if(w){setPoints(p=>p+1000+s.remainingHealth*10+s.bestCombo*100);if(mode==='survival')setCarry(Math.max(15,s.remainingHealth));}
+  if(mode==='online'&&player&&(!w||step+1>=battles.length))void recordRun({data:{name,fighterId:player.id,wins:step+(w?1:0)}}).catch(()=>{});
+  if(mode==='duel'&&lobby){const r:DuelResult={won:w,health:s.remainingHealth,damage:s.damage,time:s.time};void net(()=>submitDuel({data:{code:lobby.code,name,result:r}})).then(row=>{if(row)setLobby(row as Lobby);});}
+  setScreen('result');}
  const next=()=>{if(won && step+1<battles.length){setStep(s=>s+1);setScreen('vs');}else setScreen('vs');};
  const fullScreen=()=>{if(!document.fullscreenElement)void document.documentElement.requestFullscreen?.().catch(()=>{});else void document.exitFullscreen?.();};
  return <main className={`game-app screen-${screen}`}>
