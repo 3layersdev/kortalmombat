@@ -14,7 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      duel_lobbies: {
+        Row: {
+          code: string
+          created_at: string
+          guest_fighter: string | null
+          guest_name: string | null
+          guest_result: Json | null
+          host_fighter: string
+          host_name: string
+          host_result: Json | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          guest_fighter?: string | null
+          guest_name?: string | null
+          guest_result?: Json | null
+          host_fighter: string
+          host_name: string
+          host_result?: Json | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          guest_fighter?: string | null
+          guest_name?: string | null
+          guest_result?: Json | null
+          host_fighter?: string
+          host_name?: string
+          host_result?: Json | null
+        }
+        Relationships: []
+      }
+      online_ghosts: {
+        Row: {
+          created_at: string
+          fighter_id: string
+          id: string
+          player_name: string
+          wins: number
+        }
+        Insert: {
+          created_at?: string
+          fighter_id: string
+          id?: string
+          player_name: string
+          wins?: number
+        }
+        Update: {
+          created_at?: string
+          fighter_id?: string
+          id?: string
+          player_name?: string
+          wins?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
