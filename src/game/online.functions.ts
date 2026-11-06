@@ -10,7 +10,7 @@ const nameOf = (v: unknown) => { const n = cleanName(str(v)); if (!n) throw new 
 const result = (v: unknown): DuelResult => {
   const r = (v ?? {}) as Record<string, unknown>;
   const n = (x: unknown, m: number) => Math.max(0, Math.min(m, Math.round(Number(x) || 0)));
-  return { won: r.won === true, health: n(r.health, 100), damage: n(r.damage, 999), time: n(r.time, 999) };
+  return { won: r['won'] === true, health: n(r['health'], 100), damage: n(r['damage'], 999), time: n(r['time'], 999) };
 };
 
 export const findRivals = createServerFn({ method: "POST" })
@@ -80,7 +80,7 @@ export const submitDuel = createServerFn({ method: "POST" })
     const role = row.host_name === data.name ? "host" : row.guest_name === data.name ? "guest" : null;
     if (!role) throw new Error("Not in this lobby");
     if (row[`${role}_result`]) return row; // one attempt only
-    const { data: upd, error } = await db.from("duel_lobbies").update({ [`${role}_result`]: data.result }).eq("code", data.code).select(lobbyCols).single();
+    const { data: upd, error } = await db.from("duel_lobbies").update(role === "host" ? { host_result: { ...data.result } } : { guest_result: { ...data.result } }).eq("code", data.code).select(lobbyCols).single();
     if (error) throw new Error(error.message);
     return upd;
   });
