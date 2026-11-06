@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { FINISH_TIMING, victimVisual, executionPose } from './finishers';
 import { drawFinisherEffects } from './finisher-effects';
 import { arenaArt, arenaImage, animateScenery } from './scenery';
+import type { NetLink, NetMsg, Snap, SnapF } from './netplay';
 
 const W = 960, H = 540, GROUND = 470, GRAV = 0.9;
 type Act = "idle" | "walk" | "punch" | "kick" | "block" | "hit" | "ko" | "special" | "win" | "crouch" | "dizzy";
@@ -26,10 +27,12 @@ export interface MatchStats { rounds: string; damage: number; hits: number; best
 export interface ArenaProps {
   p1: FighterDef; p2: FighterDef; arena: ArenaDef; difficulty: number; stage: string;
   roundSeconds?: number; training?: boolean; initialHealth?: number; challenge?: string;
-  onEnd: (won: boolean, stats: MatchStats) => void; onQuit: () => void;
+  onEnd: (won: boolean, stats: MatchStats) => void; onQuit: () => void; net?: NetLink;
 }
 
-export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, onQuit, roundSeconds = 99, training = false, initialHealth = 100, challenge = "" }: ArenaProps) {
+export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, onQuit, roundSeconds = 99, training = false, initialHealth = 100, challenge = "", net }: ArenaProps) {
+  const guest = net?.role === "guest";
+  const me = guest ? p2Def : p1Def;
   const cv = useRef<HTMLCanvasElement>(null);
   const keys = useRef<{[key:string]: boolean | number | Record<string,boolean> | undefined; taps?:Record<string,boolean>; sp?:number; finish?:number; a?:boolean; d?:boolean; w?:boolean; s?:boolean; l?:boolean}>({});
   const paused = useRef(false);
@@ -57,6 +60,12 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
     let cinematic: ReturnType<typeof finishersFor>[number] | null = null;
     let banner = "", bannerSub = "", hitstop = 0, shake = 0, flash = 0, winner: F | null = null, flawless = false, bolt = 0, finisherUsed = false;
     const prev: Record<string, boolean> = {};
+    const remote = { k: {} as Record<string, boolean>, taps: {} as Record<string, boolean>, sp: undefined as number | undefined };
+    const rprev: Record<string, boolean> = {};
+    let annText = "", fsText = "";
+    const announce = (t: string) => { annText = t; setAnnouncement(t); };
+    const stageFs = (t: string) => { fsText = t; setFinishState(t); };
+    const gStats = { damage: 0, hits: 0 };
     const ai = { move: 0, block: false, next: 0 };
 
     const burst = (x: number, y: number, color: string, n = 14, sp = 6) => {
@@ -67,7 +76,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
     const startRound = () => {
       p1 = mk(p1Def, 260, 1); p2 = mk(p2Def, 700, -1); projs = []; timer = roundSeconds * 60;
       p1.hp = p1.d.hp * initialHealth / 100;
-      finisherUsed = false; cinematic = null; winner = null; setFinisher(null); setFinishState(''); setAnnouncement("");
+      finisherUsed = false; cinematic = null; winner = null; setFinisher(null); stageFs(''); announce("");
       phase = "intro"; phaseT = 0; banner = round === 3 ? "FINAL ROUND" : `ROUND ${round}`; bannerSub = "";
       sfx.gong(); sfx.say(round === 3 ? "Final round" : round === 1 ? "Round one" : "Round two");
     };
@@ -76,14 +85,15 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
     const other = (f: F) => (f === p1 ? p2 : p1);
     const busy = (f: F) => f.frozen > 0 || ["punch", "kick", "hit", "special", "ko", "win", "dizzy"].includes(f.act);
     const completeMatch = () => {
-      phase = 'end'; setFinisher(null); setFinishState('');
+      phase = 'end'; setFinisher(null); stageFs('');
+      net?.send({ t: 'end', w1, w2, h1: p1.hp / p1.d.hp * 100, h2: p2.hp / p2.d.hp * 100 });
       endRef.current(w1 >= 2,{rounds:`${w1} — ${w2}`,damage:Math.round(matchStats.damage),hits:matchStats.hits,bestCombo:matchStats.bestCombo,remainingHealth:Math.round(p1.hp/p1.d.hp*100),time:Math.round(matchStats.time/60)});
     };
     const beginFinish = (index: number) => {
       if (phase !== 'ready' || !winner || finisherUsed) return;
       const selected = finishersFor(winner.d)[index]; if (!selected) return;
       cinematic = selected; finisherUsed = true; phase = 'finish'; phaseT = 0;
-      setFinisher(null); setFinishState('windup'); setAnnouncement(`${winner.d.name} · ${selected.name.split(' · ')[1] ?? selected.name}`);
+      setFinisher(null); stageFs('windup'); announce(`${winner.d.name} · ${selected.name.split(' · ')[1] ?? selected.name}`);
       winner.act = 'special'; winner.spec = null; winner.t = 0;
       winner.x = winner === p1 ? 340 : 620; winner.px = winner.x;
       const loser = other(winner); loser.x = winner === p1 ? 620 : 340; loser.px = loser.x;
@@ -93,7 +103,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
 
     const applyHit = (a: F, d: F, base: number, kb: number, o: { launch?: boolean; freeze?: boolean; heavy?: boolean; kick?: boolean } = {}) => {
       if (d.act === "ko" || phase !== "fight") return;
-      let dmg = Math.min(18, base * Math.max(.35,1-a.combo*.08)) * a.d.power * (a === p2 ? 0.7 + difficulty * 0.4 : 1);
+      let dmg = Math.min(18, base * Math.max(.35,1-a.combo*.08)) * a.d.power * (a === p2 && !net ? 0.7 + difficulty * 0.4 : 1);
       const hx = d.x - a.face * 15, hy = d.y - 110 * (d.d.scale ?? 1);
       if (d.act === "block") {
         hitstop = 2; dmg *= 0.15; d.hp = Math.max(0, d.hp - dmg); d.vx = a.face * 5;
@@ -137,7 +147,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       return tail.every((e, i) => e.k === seq[i]) && frame - (tail[0]?.f ?? frame) < 90;
     };
     const push = (f: F, k: string) => { f.buf.push({ k, f: frame }); if (f.buf.length > 10) f.buf.shift(); };
-    const press = (f: F, btn: "LP" | "HP" | "LK" | "HK") => {
+    const press = (f: F, btn: "LP" | "HP" | "LK" | "HK", crouching = false) => {
       push(f, btn);
       if(phase!=="fight" || f.frozen>0 || f.act==="hit")return;
       const matching = combosFor(f.d).find(c=>matches(f,c.input));
@@ -145,7 +155,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
         doSpecial(f,{name:matching.name,input:matching.input,type:matching.type,dmg:matching.damage,color:matching.color,desc:"Combo finisher"});f.buf=[];return;
       }
       if(busy(f) && f.t>6)return;
-      if(keys.current.s && btn==="HP") {doSpecial(f,{name:"RISING UPPERCUT",input:[],type:"uppercut",dmg:10,color:f.d.color,desc:"Launcher"});return;}
+      if(crouching && btn==="HP") {doSpecial(f,{name:"RISING UPPERCUT",input:[],type:"uppercut",dmg:10,color:f.d.color,desc:"Launcher"});return;}
       for(const sp of f.d.specials){const seq=sp.input.map(k=>k==="P"?"HP":k==="K"?"HK":k);if(matches(f,seq)&&f.spCd===0){doSpecial(f,sp);f.buf=[];return;}}
       attack(f,btn.endsWith("P")?"punch":"kick",btn);
     };
@@ -333,6 +343,62 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       ctx.fillStyle = color; ctx.fillText(t, W / 2, y);
     };
 
+    const control = (f: F, K: Record<string, unknown>, taps: Record<string, boolean>, pv: Record<string, boolean>, spi?: number) => {
+      const edge = (k: string) => !!taps[k] || (!!K[k] && !pv[k]);
+      if (phase === "fight" && f.frozen === 0 && f.act !== "ko") {
+        if (edge("s")) push(f, "d");
+        if (edge("w")) push(f, "u");
+        if (edge("a")) push(f, f.face === 1 ? "b" : "f");
+        if (edge("d")) push(f, f.face === 1 ? "f" : "b");
+        if (edge("j")) press(f, "HP", !!K.s);
+        if (edge("k")) press(f, "HK", !!K.s);
+        if (edge("u")) press(f, "LP", !!K.s);
+        if (edge("i")) press(f, "LK", !!K.s);
+        if (spi !== undefined) { const sp = f.d.specials[spi]; if (sp && !busy(f) && f.spCd === 0) doSpecial(f, sp);  }
+        if (!busy(f)) {
+          const blk = !!K.l && f.y >= GROUND;
+          f.act = blk ? "block" : K.s && f.y>=GROUND ? "crouch" : "idle";
+          if (!blk) {
+            const m = (K.d ? 1 : 0) - (K.a ? 1 : 0);
+            if (m && !K.s) { f.vx += (m * f.d.speed - f.vx) * (f.y >= GROUND ? 0.35 : 0.08); if (f.y >= GROUND) f.act = "walk"; }
+            if (K.w && f.y >= GROUND) { f.vy = -f.d.jump; sfx.jump(); }
+          }
+        }
+      }
+      for (const k of ["a", "d", "w", "s", "j", "k", "l", "u", "i"]) pv[k] = !!K[k];
+    };
+    const sf = (f: F): SnapF => ({ x: f.x, y: f.y, vx: f.vx, vy: f.vy, hp: f.hp, face: f.face, act: f.act, t: f.t, level: f.level, land: f.land, frozen: f.frozen, spCd: f.spCd, sp: f.spec ? { name: f.spec.name, type: f.spec.type, color: f.spec.color } : null });
+    const snap = (): Snap => ({ f: frame, ph: phase, pt: phaseT, b: banner, bs: bannerSub, w1, w2, tm: timer, sh: shake, fl: flash, a: sf(p1), c: sf(p2), pr: projs.map(p => ({ x: p.x, y: p.y, vx: p.vx, c: p.color, w: p.wave })), ann: annText, fs: fsText, cin: cinematic && winner ? finishersFor(winner.d).indexOf(cinematic) : -1, win: winner === p1 ? 1 : winner === p2 ? 2 : 0 });
+    let snapAt = performance.now();
+    const applyF = (f: F, d: SnapF) => {
+      f.px = f.x; f.py = f.y;
+      if (d.hp < f.hp - 0.5) {
+        burst(f.x, f.y - 120, "#ffb04a", 14, 7); burst(f.x, f.y - 120, "#c81a1a", 8, 4); float(f.x, f.y - 180, `-${Math.round(f.hp - d.hp)}`, "#ff5a3a", 26); sfx.punch();
+        if (f === p1) { gStats.damage += f.hp - d.hp; gStats.hits++; }
+      }
+      if (d.act !== f.act && (d.act === "punch" || d.act === "kick")) sfx.whoosh();
+      Object.assign(f, { x: d.x, y: d.y, vx: d.vx, vy: d.vy, hp: d.hp, face: d.face, act: d.act as Act, t: d.t, level: d.level, land: d.land, frozen: d.frozen, spCd: d.spCd, spec: d.sp ? ({ ...d.sp, input: [], dmg: 0, desc: "" } as unknown as Special) : null });
+    };
+    const applySnap = (sn: Snap) => {
+      snapAt = performance.now();
+      applyF(p1, sn.a); applyF(p2, sn.c);
+      if (sn.b && sn.b !== banner && (sn.b.startsWith("ROUND") || sn.b === "FINAL ROUND")) sfx.gong();
+      if (sn.b === "FIGHT!" && banner !== "FIGHT!") sfx.say("Fight!");
+      if (sn.b === "K.O." && banner !== "K.O.") sfx.ko();
+      frame = sn.f; phase = sn.ph as typeof phase; phaseT = sn.pt; banner = sn.b; bannerSub = sn.bs; w1 = sn.w1; w2 = sn.w2; timer = sn.tm; shake = sn.sh; if (sn.fl > flash) flash = sn.fl;
+      projs = sn.pr.map(p => ({ x: p.x, y: p.y, vx: p.vx, owner: p1, dmg: 0, color: p.c, freeze: false, life: 1, wave: p.w }));
+      if (sn.ann !== annText) announce(sn.ann);
+      if (sn.fs !== fsText) stageFs(sn.fs);
+      winner = sn.win === 1 ? p1 : sn.win === 2 ? p2 : null;
+      cinematic = sn.cin >= 0 && winner ? finishersFor(winner.d)[sn.cin] ?? null : null;
+    };
+    const unlisten = net?.listen((m: NetMsg) => {
+      if (m.t === "in" && !guest) { remote.k = m.k; for (const k of m.taps) remote.taps[k] = true; if (m.sp !== undefined) remote.sp = m.sp; }
+      else if (m.t === "st" && guest) applySnap(m.s);
+      else if (m.t === "end" && guest && phase !== "end") { phase = "end"; endRef.current(m.w2 >= 2, { rounds: `${m.w2} — ${m.w1}`, damage: Math.round(gStats.damage), hits: gStats.hits, bestCombo: 0, remainingHealth: Math.round(m.h2), time: Math.round(frame / 60) }); }
+    });
+    let netTick = 0;
+
     const update = () => {
       for(const f of [p1,p2]){f.px=f.x;f.py=f.y;}
       if(shake>0){shake*=0.86;if(shake<0.4)shake=0;}
@@ -345,39 +411,17 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
           if(winner === p2 && phaseT >= 110)beginFinish(0);
           else if(phaseT >= FINISH_TIMING.ready)beginFinish(0);
         } else if(cinematic && winner) {
-          if(phaseT === 60){setFinishState('execution');sfx.special(cinematic.effect);}
+          if(phaseT === 60){stageFs('execution');sfx.special(cinematic.effect);}
           if(phaseT >= 60 && phaseT < 180 && phaseT%24===0){sfx.whoosh();burst(other(winner).x,GROUND-110,cinematic.color,10,5);shake=4;}
-          if(phaseT === 180){setFinishState('aftermath');shake=16;flash=7;sfx.ko();burst(other(winner).x,GROUND-100,cinematic.color,55,9);winner.act='win';setAnnouncement(`${other(winner).d.name} · ${cinematic.aftermath}`);sfx.say('Fatality');}
+          if(phaseT === 180){stageFs('aftermath');shake=16;flash=7;sfx.ko();burst(other(winner).x,GROUND-100,cinematic.color,55,9);winner.act='win';announce(`${other(winner).d.name} · ${cinematic.aftermath}`);sfx.say('Fatality');}
           if(phaseT >= FINISH_TIMING.end){completeMatch();return;}
         }
         for(const k of ['a','d','w','s','j','k','l','u','i'])prev[k]=!!K[k];
         K.taps={};delete K.sp;return;
       }
       const taps: Record<string, boolean> = K.taps ?? {}; K.taps = {};
-      const edge = (k: string) => !!taps[k] || (!!K[k] && !prev[k]);
-      if (phase === "fight" && p1.frozen === 0 && p1.act !== "ko") {
-        if (edge("s")) push(p1, "d");
-        if (edge("w")) push(p1, "u");
-        if (edge("a")) push(p1, p1.face === 1 ? "b" : "f");
-        if (edge("d")) push(p1, p1.face === 1 ? "f" : "b");
-        if (edge("j")) press(p1, "HP");
-        if (edge("k")) press(p1, "HK");
-        if (edge("u")) press(p1, "LP");
-        if (edge("i")) press(p1, "LK");
-        if (K.sp !== undefined) { const sp = p1.d.specials[K.sp]; if (sp && !busy(p1) && p1.spCd === 0) doSpecial(p1, sp); delete K.sp; }
-        if (!busy(p1)) {
-          const blk = !!K.l && p1.y >= GROUND;
-          p1.act = blk ? "block" : K.s && p1.y>=GROUND ? "crouch" : "idle";
-          if (!blk) {
-            const m = (K.d ? 1 : 0) - (K.a ? 1 : 0);
-            if (m && !K.s) { p1.vx += (m * p1.d.speed - p1.vx) * (p1.y >= GROUND ? 0.35 : 0.08); if (p1.y >= GROUND) p1.act = "walk"; }
-            if (K.w && p1.y >= GROUND) { p1.vy = -p1.d.jump; sfx.jump(); }
-          }
-        }
-      }
-      delete K.sp;
-      for (const k of ["a", "d", "w", "s", "j", "k", "l", "u", "i"]) prev[k] = !!K[k];
-      runAI();
+      control(p1, K as Record<string, unknown>, taps, prev, K.sp); delete K.sp;
+      if (net) { control(p2, remote.k, remote.taps, rprev, remote.sp); remote.taps = {}; remote.sp = undefined; } else runAI();
       for (const f of [p1, p2]) {
         updAttack(f); updSpecial(f);
         const airborne = f.y < GROUND;
@@ -415,7 +459,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
         if(training){p1.hp=p1.d.hp;p2.hp=p2.d.hp;}
         if (p1.hp <= 0 || p2.hp <= 0 || timer <= 0) {
           const result = roundWinner(p1.hp,p2.hp);
-          if(result==="draw"){phase="draw";phaseT=0;banner="DRAW";bannerSub="ROUND REPLAY";setAnnouncement("Equal health · Round drawn");return;}
+          if(result==="draw"){phase="draw";phaseT=0;banner="DRAW";bannerSub="ROUND REPLAY";announce("Equal health · Round drawn");return;}
           const p1w = result==="p1"; winner = p1w ? p1 : p2; const loser = p1w ? p2 : p1;
           flawless = winner.hp >= winner.d.hp;
           loser.act = "ko"; loser.t = 0; loser.frozen = 0; loser.vy = -8; loser.spec = null; projs = [];
@@ -424,12 +468,12 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
           if(w1>=2 || w2>=2){
             loser.act='dizzy';loser.y=GROUND;loser.py=GROUND;loser.vy=0;loser.vx=0;
             winner.act='idle';winner.t=0;winner.spec=null;winner.frozen=0;winner.y=GROUND;winner.py=GROUND;winner.vx=0;winner.vy=0;
-            phase='ready';phaseT=0;banner='FINISH THEM';bannerSub='';setFinishState('ready');
-            setAnnouncement(`ROUND ${round} · ${winner.d.name} WINS${timer<=0?' · MORE HEALTH':''}`);
+            phase='ready';phaseT=0;banner='FINISH THEM';bannerSub='';stageFs('ready');
+            announce(`ROUND ${round} · ${winner.d.name} WINS${timer<=0?' · MORE HEALTH':''}`);
             if(p1w)setFinisher(0);sfx.say('Finish them');return;
           }
           phase = "ko"; phaseT = 0; banner = timer <= 0 ? "TIME UP" : "K.O.";
-          setAnnouncement(`ROUND ${round} · ${winner.d.name} WINS${timer<=0?" · MORE HEALTH":""}`); flash = 12; sfx.ko();
+          announce(`ROUND ${round} · ${winner.d.name} WINS${timer<=0?" · MORE HEALTH":""}`); flash = 12; sfx.ko();
         }
       } else if(phase==="draw" && phaseT>=180){startRound();}
       else if (phase === "ko" && winner) {
@@ -491,9 +535,14 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
     const loop = (now = performance.now()) => {
       accumulator += Math.min(now-last,100);last=now;
       if (!paused.current) {
-        while(accumulator>=1000/60){update();accumulator-=1000/60;}
-        render(accumulator/(1000/60),now);
-        if (frame % 2 === 0) setHud({ h1: (p1.hp / p1.d.hp) * 100, h2: (p2.hp / p2.d.hp) * 100, w1, w2, time: Math.ceil(timer / 60), cd: p1.spCd });
+        if (guest) {
+          while(accumulator>=1000/60){accumulator-=1000/60;if(++netTick%2===0){const K=keys.current;const k:Record<string,boolean>={};for(const c of ["a","d","w","s","j","k","l","u","i"])k[c]=!!K[c];net.send({t:"in",k,taps:Object.keys(K.taps??{}),sp:K.sp});K.taps={};delete K.sp;}}
+          render(Math.min(1,(now-snapAt)/33),now);
+        } else {
+          while(accumulator>=1000/60){update();accumulator-=1000/60;if(net&&++netTick%2===0)net.send({t:"st",s:snap()});}
+          render(accumulator/(1000/60),now);
+        }
+        if (frame % 2 === 0) setHud({ h1: (p1.hp / p1.d.hp) * 100, h2: (p2.hp / p2.d.hp) * 100, w1, w2, time: Math.ceil(timer / 60), cd: (guest ? p2 : p1).spCd });
       }
       if(paused.current)accumulator=0;
       raf = requestAnimationFrame(loop);
@@ -502,16 +551,16 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
     const map: Record<string, string> = { arrowleft: "a", arrowright: "d", arrowup: "w", arrowdown: "s", z: "j", x: "k", c: "l" };
     const kd = (e: KeyboardEvent) => {
       const k = map[e.key.toLowerCase()] ?? e.key.toLowerCase();
-      if (k === "escape" || k === "p") { paused.current = !paused.current; setPaused(paused.current); return; }
+      if ((k === "escape" || k === "p") && !net) { paused.current = !paused.current; setPaused(paused.current); return; }
       if (e.key.startsWith("Arrow") || e.key === " ") e.preventDefault();
       if (!keys.current[k]) { keys.current.taps = { ...(keys.current.taps ?? {}), [k]: true }; }
       keys.current[k] = true;
     };
     const ku = (e: KeyboardEvent) => { const k = map[e.key.toLowerCase()] ?? e.key.toLowerCase(); keys.current[k] = false; };
-    const clr = () => { keys.current = {}; paused.current=true;setPaused(true); };
+    const clr = () => { keys.current = {}; if (!net) { paused.current=true;setPaused(true); } };
     addEventListener("keydown", kd); addEventListener("keyup", ku); addEventListener("blur", clr);
-    return () => { removeEventListener("blur", clr); cancelAnimationFrame(raf); removeEventListener("keydown", kd); removeEventListener("keyup", ku); window.speechSynthesis?.cancel(); };
-  }, [p1Def, p2Def, arena, difficulty, roundSeconds, training, initialHealth]);
+    return () => { removeEventListener("blur", clr); cancelAnimationFrame(raf); removeEventListener("keydown", kd); removeEventListener("keyup", ku); unlisten?.(); window.speechSynthesis?.cancel(); };
+  }, [p1Def, p2Def, arena, difficulty, roundSeconds, training, initialHealth, net, guest]);
 
   const hold = (k: string) => ({
     onPointerDown: (e: React.PointerEvent) => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); keys.current.taps = { ...(keys.current.taps ?? {}), [k]: true }; keys.current[k] = true; },
@@ -532,12 +581,12 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       </div>
       <canvas ref={cv} width={W} height={H} className="arena-canvas" aria-label="Fighting arena"/>
       <div className="arena-caption"><span>{arena.name}</span><span>{challenge || "BEST OF THREE"}</span></div>
-      <Button variant="ghost" size="icon" onClick={togglePause} className="pause-button" aria-label="Pause">Ⅱ</Button>
+      {net ? <Button variant="ghost" size="icon" onClick={onQuit} className="pause-button" aria-label="Leave match">✕</Button> : <Button variant="ghost" size="icon" onClick={togglePause} className="pause-button" aria-label="Pause">Ⅱ</Button>}
       {announcement && <div className="round-announcement" role="status">{announcement}</div>}
-      {finisher!==null && <div className="finisher-picker"><select aria-label="Select finisher" value={finisher} onChange={e=>setFinisher(Number(e.target.value))}>{currentFinishers.map((f,i)=><option key={f.name} value={i}>{f.name}</option>)}</select><Button variant="game" onClick={()=>{setFinisher(null);keys.current.finish=finisher;}}>FINISH</Button></div>}
+      {finisher!==null && !guest && <div className="finisher-picker"><select aria-label="Select finisher" value={finisher} onChange={e=>setFinisher(Number(e.target.value))}>{currentFinishers.map((f,i)=><option key={f.name} value={i}>{f.name}</option>)}</select><Button variant="game" onClick={()=>{setFinisher(null);keys.current.finish=finisher;}}>FINISH</Button></div>}
       <div className="combat-dock">
         <div className="direction-pad"><span/><Button variant="control" {...hold("w")} aria-label="Jump">↑</Button><span/><Button variant="control" {...hold("a")} aria-label="Move left">←</Button><Button variant="control" {...hold("s")} aria-label="Crouch">↓</Button><Button variant="control" {...hold("d")} aria-label="Move right">→</Button></div>
-        <div className="special-controls">{p1Def.specials.map((sp,i)=><Button key={sp.name} variant="outline" disabled={hud.cd>0} onPointerDown={e=>{e.preventDefault();keys.current.sp=i;}}>{sp.name}</Button>)}<Button variant="outline" {...hold("l")}>GUARD</Button></div>
+        <div className="special-controls">{me.specials.map((sp,i)=><Button key={sp.name} variant="outline" disabled={hud.cd>0} onPointerDown={e=>{e.preventDefault();keys.current.sp=i;}}>{sp.name}</Button>)}<Button variant="outline" {...hold("l")}>GUARD</Button></div>
         <div className="attack-pad"><Button variant="control" {...hold("u")} aria-label="Low punch"><b>LP</b><small>LOW PUNCH</small></Button><Button variant="control" {...hold("j")} aria-label="High punch"><b>HP</b><small>HIGH PUNCH</small></Button><Button variant="control" {...hold("i")} aria-label="Low kick"><b>LK</b><small>LOW KICK</small></Button><Button variant="control" {...hold("k")} aria-label="High kick"><b>HK</b><small>HIGH KICK</small></Button></div>
       </div>
       {isPaused && <div className="pause-overlay"><h2>PAUSED</h2><Button variant="game" onClick={togglePause}>RESUME</Button><Button variant="outline" onClick={onQuit}>MAIN MENU</Button></div>}
