@@ -79,8 +79,8 @@ export const MODES: {id: GameMode; name: string; detail: string; tag: string}[] 
  {id:"survival",name:"SURVIVAL",detail:"Carry your health into the next fight.",tag:"ENDURANCE"},
  {id:"timeattack",name:"TIME ATTACK",detail:"30-second rounds. No second chances.",tag:"SPEED"},
  {id:"training",name:"TRAINING",detail:"A passive rival. Unlimited practice.",tag:"PRACTICE"},
- {id:"online",name:"ONLINE CUP",detail:"8 rivals from real players.",tag:"MULTIPLAYER"},
- {id:"duel",name:"LOBBY",detail:"Duel a friend by code.",tag:"FRIENDS"},
+ {id:"online",name:"ONLINE CUP",detail:"Live fights vs real players.",tag:"MULTIPLAYER"},
+ {id:"duel",name:"LOBBY",detail:"Live duel with a friend.",tag:"FRIENDS"},
 ];
 const names = ["ASHEN","CINDER","VEX","ONYX","NYX","SOLARIS","TEMPEST","ZENITH","REVENANT","KIRA","RAVEN","TALON","RIFT","EMBER","SABLE","ORION","VALKYR","HAVOC","STORM","BLAZE","SHIVER","VOLT","ECHO","DREAD","JADE","RAZE","AKIRA","NOVA","VULCAN","SPECTRE","KOBRA","RUSH","IVORY","AZURA","KAZAN","MORROW","STRIX","FANG","WARDEN","VIGIL","NOX","FURY","SAKURA","KRYO","HOLLOW","TITAN","RUNE","ZEAL","VENOM","INFERNA"];
 export const EXPANDED_FIGHTERS: FighterDef[] = names.map((name,i) => {

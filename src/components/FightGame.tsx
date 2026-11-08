@@ -1,4 +1,4 @@
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {ArrowLeft,ArrowRight,Volume2,VolumeX,Swords,Trophy,Flame,Timer,Target,Shield,ChevronLeft,ChevronRight,Maximize,BookOpen,Check} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import intro from '@/assets/intro-bg.jpg.asset.json';
@@ -8,17 +8,15 @@ import {fighterSprite,skinClass,warmFighter} from '@/game/sprites';
 import {arenaImage,warmScenery} from '@/game/scenery';
 import {sfx,setMuted,sceneMusic} from '@/game/sfx';
 import {Globe,Users} from 'lucide-react';
-import {buildBracket,cleanName,duelWinner,ONLINE_STAGES,type DuelResult} from '@/game/online';
-import {findRivals,recordRun,createLobby,joinLobby,getLobby,submitDuel} from '@/game/online.functions';
+import {cleanName,ONLINE_STAGES} from '@/game/online';
+import {joinQueue,joinPrivate,openRoom,type Match,type NetLink} from '@/game/netplay';
 import {dayKey,dailyGoals,completedBy,loadProgress,saveProgress,claim,type DailyProgress} from '@/game/daily';
 
 type Screen='intro'|'menu'|'select'|'vs'|'fight'|'result'|'moves'|'lobby';
-interface Battle {enemy:FighterDef;arena:ArenaDef;difficulty:number;stage:string;challenge:string}
-interface Lobby {code:string;host_name:string;host_fighter:string;host_result:unknown;guest_name:string|null;guest_fighter:string|null;guest_result:unknown}
+interface Battle {enemy:FighterDef;arena:ArenaDef;difficulty:number;stage:string;challenge:string;net?:NetLink}
 const first = ROSTER[0];
 const icons=[Swords,Trophy,Shield,Flame,Timer,Target,Globe,Users];
 const byId=(id?:string|null)=>ROSTER.find(f=>f.id===id);
-const pickArena=()=>ARENAS[Math.floor(Math.random()*ARENAS.length)]??ARENAS[0]!;
 const emptyStats:MatchStats={rounds:'0 — 0',damage:0,hits:0,bestCombo:0,remainingHealth:100,time:0};
 export function FightGame(){
  const [screen,setScreen]=useState<Screen>('intro');const [mode,setMode]=useState<GameMode>('quick');
@@ -34,47 +32,58 @@ export function FightGame(){
  const mute=()=>setM(m=>{setMuted(!m);return !m;});
  const enter=()=>{sfx.unlock();sfx.gong();setScreen('menu');};
  useEffect(()=>{const h=(e:KeyboardEvent)=>{if(screen==='intro' && (e.key==='Enter'||e.key===' '))enter();if(e.key.toLowerCase()==='m')mute();};window.addEventListener('keydown',h);return()=>window.removeEventListener('keydown',h);},[screen]);
- const [name,setName]=useState('');const [lobby,setLobby]=useState<Lobby|null>(null);const [joinCode,setJoinCode]=useState('');const [intent,setIntent]=useState<'create'|'join'>('create');const [busy,setBusy]=useState(false);const [netErr,setNetErr]=useState('');
+ const [name,setName]=useState('');const [joinCode,setJoinCode]=useState('');const [searching,setSearching]=useState(false);const [netErr,setNetErr]=useState('');const [cup,setCup]=useState(0);
+ const cancelRef=useRef<(()=>void)|null>(null);const roomRef=useRef<(()=>void)|null>(null);const screenRef=useRef(screen);screenRef.current=screen;
  useEffect(()=>{setName(localStorage.getItem('kortal-name')??'');},[]);
+ useEffect(()=>()=>{cancelRef.current?.();roomRef.current?.();},[]);
  const saveName=(v:string)=>{const n=cleanName(v);setName(n);localStorage.setItem('kortal-name',n);};
- const net=async<T,>(fn:()=>Promise<T>):Promise<T|undefined>=>{setBusy(true);setNetErr('');try{return await fn();}catch(e){setNetErr(e instanceof Error?e.message:'Connection failed');setScreen('lobby');return undefined;}finally{setBusy(false);}};
- const myRole=lobby?(lobby.host_name===name?'host':'guest'):null;
- function fightDuel(){if(!lobby||!myRole)return;const me=byId(myRole==='host'?lobby.host_fighter:lobby.guest_fighter);const foe=byId(myRole==='host'?lobby.guest_fighter:lobby.host_fighter);const rival=myRole==='host'?lobby.guest_name:lobby.host_name;if(!me||!foe)return;
-  setMode('duel');setPlayer(me);setBattles([{enemy:foe,arena:pickArena(),difficulty:.6,stage:`DUEL · VS ${rival}`,challenge:`LOBBY ${lobby.code}`}]);setStep(0);setCarry(100);setScreen('vs');sfx.confirm();}
+ const stopSearch=()=>{cancelRef.current?.();cancelRef.current=null;setSearching(false);};
+ const botFight=(f:FighterDef,stage:number)=>{const foes=ROSTER.filter(x=>!x.boss&&x.id!==f.id);const enemy=foes[Math.floor(Math.random()*foes.length)]??f;
+  setBattles([{enemy,arena:ARENAS[(stage*3)%ARENAS.length]!,difficulty:Math.min(.85,.4+stage*.05),stage:`ONLINE ${stage+1} / ${ONLINE_STAGES} · VS ${enemy.name}_BOT`,challenge:'NO PLAYER FOUND · BOT'}]);setStep(0);setScreen('vs');};
+ async function matched(m:Match,f:FighterDef,stage:number){
+  cancelRef.current=null;const foe=byId(m.foe.fighterId);if(!foe){setSearching(false);setNetErr('Opponent fighter unknown');return;}
+  const room=openRoom(m,()=>{if(screenRef.current==='fight'){setNetErr(`${m.foe.name} LEFT THE FIGHT`);ended(true,{...emptyStats,rounds:'WIN BY FORFEIT'});}});roomRef.current=room.close;
+  const ok=await Promise.race([room.ready.then(()=>true),new Promise<boolean>(r=>setTimeout(()=>r(false),10000))]);
+  setSearching(false);if(!ok){room.close();setNetErr('Opponent did not connect. Try again.');return;}
+  await Promise.all([warmFighter(f),warmFighter(foe)]).catch(()=>{});
+  const arena=ARENAS[m.arena%ARENAS.length]!;void arenaImage(arena).decode().catch(()=>{});
+  setPlayer(f);setBattles([{enemy:foe,arena,difficulty:.5,stage:mode==='online'?`LIVE ${stage+1} / ${ONLINE_STAGES} · VS ${m.foe.name}`:`PRIVATE · VS ${m.foe.name}`,challenge:'LIVE PLAYER',net:room.link}]);setStep(0);setCarry(100);setScreen('fight');sfx.confirm();
+ }
+ function search(f:FighterDef,stage:number){
+  stopSearch();setNetErr('');setPlayer(f);setSearching(true);setScreen('lobby');const me={name,fighterId:f.id};
+  if(mode==='duel'){cancelRef.current=joinPrivate(joinCode,me,m=>void matched(m,f,stage));return;}
+  const cancel=joinQueue(me,m=>{clearTimeout(t);void matched(m,f,stage);});
+  const t=setTimeout(()=>{if(cancelRef.current===stopper){stopSearch();botFight(f,stage);}},25000);
+  const stopper=()=>{clearTimeout(t);cancel();};cancelRef.current=stopper;
+ }
  async function start(f:FighterDef){
-  if(mode==='online'){const real=await net(()=>findRivals({data:{name}}));if(!real)return;const ids=ROSTER.filter(x=>!x.boss&&x.id!==f.id).map(x=>x.id);const bracket=buildBracket(real.filter(r=>byId(r.fighterId)),ids);
-   const list:Battle[]=bracket.map((g,i)=>({enemy:byId(g.fighterId)??f,arena:ARENAS[(i*3)%ARENAS.length]!,difficulty:Math.min(.85,.35+i*.05+g.wins*.02),stage:`ONLINE ${i+1} / ${ONLINE_STAGES} · VS ${g.name}`,challenge:g.bot?'BOT OPPONENT':`PLAYER · ${g.wins} WINS`}));
-   setPlayer(f);setBattles(list);setStep(0);setCarry(100);setPoints(0);setScreen('vs');sfx.confirm();return;}
-  if(mode==='duel'){const row=await net(()=>intent==='create'?createLobby({data:{name,fighterId:f.id}}):joinLobby({data:{code:joinCode,name,fighterId:f.id}}));if(row){setLobby(row as Lobby);setScreen('lobby');}return;}
+  if(mode==='online'){setCup(0);search(f,0);return;}
+  if(mode==='duel'){search(f,0);return;}
   const foes=ROSTER.filter(x=>x.id!==f.id && !x.boss);const count=mode==='tournament'?16:mode==='competition'?8:mode==='survival'?30:1;
   const list:Battle[]=Array.from({length:count},(_,i)=>{const enemy=mode==='tournament'&&i===15?BOSS:foes[(i*7+Math.floor(Math.random()*foes.length))%foes.length];const arena=ARENAS[i%ARENAS.length];if(!enemy||!arena)throw new Error('Missing battle');return{enemy,arena,difficulty:mode==='training'?0:Math.min(.85,.28+i*.035),stage:mode==='tournament'?i===15?'FINAL BOSS':`STAGE ${i+1} / 16`:mode==='competition'?`LEAGUE MATCH ${i+1} / 8`:mode==='survival'?`WAVE ${i+1}`:mode==='timeattack'?'TIME ATTACK':'ROUND ONE',challenge:mode==='competition'?['STANDARD RULES','60 SECOND ROUNDS','HEAVYWEIGHT RIVAL','30 SECOND BLITZ'][i%4]??'':mode==='survival'?'PERSISTENT HEALTH':''};});
   setPlayer(f);setBattles(list);setStep(0);setCarry(100);setPoints(0);setScreen('vs');sfx.confirm();
  }
  function ended(w:boolean,s:MatchStats){setWon(w);setStats(s);if(player){const ids=completedBy(goals,w,s,player.id,mode).filter(i=>!daily.done.includes(i));if(ids.length)updDaily({...daily,done:[...daily.done,...ids]});}if(w){setPoints(p=>p+1000+s.remainingHealth*10+s.bestCombo*100);if(mode==='survival')setCarry(Math.max(15,s.remainingHealth));}
-  if(mode==='online'&&player&&(!w||step+1>=battles.length))void recordRun({data:{name,fighterId:player.id,wins:step+(w?1:0)}}).catch(()=>{});
-  if(mode==='duel'&&lobby){const r:DuelResult={won:w,health:s.remainingHealth,damage:s.damage,time:s.time};void net(()=>submitDuel({data:{code:lobby.code,name,result:r}})).then(row=>{if(row)setLobby(row as Lobby);});}
+  roomRef.current?.();roomRef.current=null;if(mode==='online')setCup(c=>w?c+1:c);
   setScreen('result');}
- const next=()=>{if(mode==='duel'){setScreen('lobby');return;}if(won && step+1<battles.length){setStep(s=>s+1);setScreen('vs');}else setScreen('vs');};
+ const next=()=>{if(mode==='online'&&player){if(won&&cup<ONLINE_STAGES)search(player,cup);else{setCup(0);search(player,0);}return;}if(mode==='duel'){setScreen('lobby');return;}if(won && step+1<battles.length){setStep(s=>s+1);setScreen('vs');}else setScreen('vs');};
  const fullScreen=()=>{if(!document.fullscreenElement)void document.documentElement.requestFullscreen?.().catch(()=>{});else void document.exitFullscreen?.();};
  return <main className={`game-app screen-${screen}`}>
   {screen!=='fight'&&<><img className="world-background" src={intro.url} width={1920} height={1088} alt="Ember temple beneath a burning moon"/><div className="world-shade"/><div className="ember-field" aria-hidden="true">{Array.from({length:12},(_,i)=><i key={i}/>)}</div></>}
   <header className="game-header"><a href="#" className="brand" onClick={e=>{e.preventDefault();if(screen!=='intro')setScreen('menu');}}><Flame/><span>KORTAL<span className="brand-secondary">MOMBAT</span></span></a><div className="header-right"><span className="edition">THE ASCENSION UPDATE</span><Button variant="ghost" size="icon" title={muted?'Enable sound':'Mute sound'} aria-label={muted?'Enable sound':'Mute sound'} onClick={mute}>{muted?<VolumeX/>:<Volume2/>}</Button><Button variant="ghost" size="icon" aria-label="Fullscreen" title="Fullscreen" onClick={fullScreen}><Maximize/></Button></div></header>
   {screen==='intro'&&<section className="intro-screen"><div className="intro-rule"><span/> <Flame/> <span/></div><p className="eyebrow intro-kicker">THE THRONE AWAITS</p><h1 className="game-title">KORTAL<span>MOMBAT</span></h1><p className="intro-subtitle">FORGED IN FIRE. CROWNED IN COMBAT.</p><Button variant="game" className="enter-button" onClick={enter}>ENTER THE TOURNAMENT <ArrowRight/></Button><div className="intro-roster"><span>{ROSTER.length} WARRIORS</span><i/><span>6 GAME MODES</span><i/><span>ONE THRONE</span></div><div className="intro-bottom"><span>THE ASCENSION • V2.0</span><span>THE LEGEND CONTINUES</span></div></section>}
   {screen==='menu'&&<section className="menu-screen"><div className="section-heading"><div><p className="eyebrow">YOUR NEXT CHAPTER</p><h1>CHOOSE YOUR BATTLE</h1></div><Button variant="ghost" onClick={()=>setScreen('moves')}><BookOpen/>MOVE ARCHIVE</Button></div><div className="mode-grid">{MODES.map((m,i)=>{const Icon=icons[i]??Swords;return <Button variant="ghost" key={m.id} className={`mode-card mode-${m.id}`} onClick={()=>{setMode(m.id);setNetErr('');setScreen(m.id==='online'||m.id==='duel'?'lobby':'select');sfx.select();}}><span className="mode-number">0{i+1}</span><Icon className="mode-icon"/><span className="mode-tag">{m.tag}</span><strong>{m.name}</strong><span className="mode-detail">{m.detail}</span><span className="mode-arrow"><ArrowRight/></span></Button>;})}</div><div className="daily-panel" aria-label="Daily challenges"><div className="daily-head"><span>DAILY CHALLENGES</span><span className="daily-koins">{daily.koins} KOINS</span></div>{goals.map(g=>{const done=daily.done.includes(g.id),got=daily.claimed.includes(g.id);return <div key={g.id} className={`daily-goal${done?' is-done':''}`}><span className="daily-check">{done?<Check/>:null}</span><span className="daily-label">{g.label}</span>{done&&!got?<Button variant="game" size="sm" onClick={()=>{updDaily(claim(daily,goals,g.id));sfx.confirm();}}>CLAIM +{g.reward}</Button>:<span className="daily-reward">{got?'CLAIMED':`+${g.reward}`}</span>}</div>;})}</div><footer className="menu-footer"><span><span className="status-dot"/> ALL FIGHTERS UNLOCKED</span><span>{ROSTER.length} WARRIORS · {ARENAS.length} ARENAS</span></footer></section>}
-  {screen==='lobby'&&<section className="lobby-screen"><Button variant="ghost" className="back-link" onClick={()=>setScreen('menu')}><ArrowLeft/>MAIN MENU</Button><p className="eyebrow">{mode==='online'?'ONLINE TOURNAMENT':'PRIVATE LOBBY'}</p><h1>{mode==='online'?'YOUR OWN BRACKET':lobby?`LOBBY ${lobby.code}`:'DUEL A FRIEND'}</h1>
-   {mode==='online'&&<p className="lobby-note">Fight 8 rivals: fighters other players used in their tournaments. Empty spots are filled with bots. Your run is shared so others can face you.</p>}
-   {!(mode==='duel'&&lobby)&&<label className="lobby-field"><span>YOUR NAME</span><input value={name} maxLength={14} placeholder="WARRIOR NAME" onChange={e=>saveName(e.target.value)}/></label>}
-   {mode==='online'&&<Button variant="game" disabled={!name||busy} onClick={()=>setScreen('select')}>CHOOSE FIGHTER<ArrowRight/></Button>}
-   {mode==='duel'&&!lobby&&<div className="lobby-actions"><Button variant="game" disabled={!name||busy} onClick={()=>{setIntent('create');setScreen('select');}}>CREATE LOBBY</Button><div className="lobby-join"><input value={joinCode} maxLength={5} placeholder="CODE" aria-label="Lobby code" onChange={e=>setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,''))}/><Button variant="outline" disabled={!name||joinCode.length<5||busy} onClick={()=>{setIntent('join');setScreen('select');}}>JOIN</Button><Button variant="ghost" disabled={!name||joinCode.length<5||busy} onClick={()=>void net(()=>getLobby({data:{code:joinCode}})).then(r=>{if(r)setLobby(r as Lobby);})}>OPEN MINE</Button></div></div>}
-   {mode==='duel'&&lobby&&(()=>{const hr=lobby.host_result as DuelResult|null,gr=lobby.guest_result as DuelResult|null;const mine=myRole==='host'?hr:gr;const verdict=hr&&gr?duelWinner(hr,gr):null;const winName=verdict==='host'?lobby.host_name:verdict==='guest'?lobby.guest_name:null;
-    return <><p className="lobby-note">Send code <b>{lobby.code}</b> to your friend. Each of you fights the other's fighter once; the better result wins.</p><div className="lobby-duel">{([['host',lobby.host_name,lobby.host_fighter,hr],['guest',lobby.guest_name,lobby.guest_fighter,gr]] as const).map(([k,n,fid,r])=>{const f=byId(fid);return <div key={k}>{f?<Portrait fighter={f}/>:<div className="fighter-portrait"/>}<strong>{n??'WAITING…'}</strong><span>{f?.name??'—'}</span><small>{r?`${r.won?'WON':'LOST'} · ${r.health}% HP · ${r.damage} DMG`:n?'NOT FOUGHT YET':''}</small></div>;})}</div>
-    {verdict&&<h2 className="lobby-verdict">{winName?`${winName} WINS THE DUEL`:'DRAW'}</h2>}
-    <div className="lobby-actions">{!mine&&lobby.guest_fighter&&<Button variant="game" onClick={fightDuel}>FIGHT<ArrowRight/></Button>}<Button variant="outline" disabled={busy} onClick={()=>void net(()=>getLobby({data:{code:lobby.code}})).then(r=>{if(r)setLobby(r as Lobby);})}>REFRESH</Button><Button variant="ghost" onClick={()=>{setLobby(null);setJoinCode('');}}>LEAVE</Button></div></>;})()}
-   {netErr&&<p className="lobby-error" role="alert">{netErr}</p>}{busy&&<p className="lobby-note">CONNECTING…</p>}</section>}
+  {screen==='lobby'&&<section className="lobby-screen"><Button variant="ghost" className="back-link" onClick={()=>{stopSearch();setScreen('menu');}}><ArrowLeft/>MAIN MENU</Button><p className="eyebrow">{mode==='online'?'LIVE ONLINE CUP':'PRIVATE LOBBY'}</p><h1>{searching?'SEARCHING…':mode==='online'?'FIGHT REAL PLAYERS':'DUEL A FRIEND LIVE'}</h1>
+   {searching?<><p className="lobby-note">{mode==='online'?`Stage ${cup+1} / ${ONLINE_STAGES} · Looking for a live opponent. If nobody is found in 25 seconds, you fight a bot.`:`Waiting for your friend in room ${joinCode}. They must enter the same code.`}</p><div className="lobby-actions">{mode==='online'&&player&&<Button variant="outline" onClick={()=>{stopSearch();botFight(player,cup);}}>FIGHT A BOT NOW</Button>}<Button variant="ghost" onClick={stopSearch}>CANCEL</Button></div></>:<>
+   <p className="lobby-note">{mode==='online'?`Each player runs their own ${ONLINE_STAGES}-stage cup and gets paired live with other players searching right now.`:'Both of you enter the same room code, then fight each other live.'}</p>
+   <label className="lobby-field"><span>YOUR NAME</span><input value={name} maxLength={14} placeholder="WARRIOR NAME" onChange={e=>saveName(e.target.value)}/></label>
+   {mode==='duel'&&<label className="lobby-field"><span>ROOM CODE</span><div className="lobby-join"><input value={joinCode} maxLength={6} placeholder="CODE" aria-label="Room code" onChange={e=>setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,''))}/><Button variant="ghost" onClick={()=>setJoinCode(Math.random().toString(36).slice(2,7).toUpperCase())}>NEW CODE</Button></div></label>}
+   <Button variant="game" disabled={!name||(mode==='duel'&&joinCode.length<4)} onClick={()=>setScreen('select')}>CHOOSE FIGHTER<ArrowRight/></Button></>}
+   {netErr&&<p className="lobby-error" role="alert">{netErr}</p>}</section>}
   {(screen==='select'||screen==='moves')&&<FighterSelect mode={mode} archive={screen==='moves'} onBack={()=>setScreen('menu')} onPick={start}/>}
   {screen==='vs'&&battle&&player&&<Versus player={player} battle={battle} step={step} total={battles.length} onDone={()=>setScreen('fight')}/>}
-  {screen==='fight'&&battle&&player&&<Arena p1={player} p2={battle.enemy} arena={battle.arena} difficulty={battle.difficulty} stage={battle.stage} challenge={battle.challenge} training={mode==='training'} initialHealth={mode==='survival'?carry:100} roundSeconds={mode==='timeattack'||battle.challenge==='30 SECOND BLITZ'?30:battle.challenge==='60 SECOND ROUNDS'?60:99} onEnd={ended} onQuit={()=>setScreen('menu')}/>}
-  {screen==='result'&&player&&battle&&<section className="result-screen"><p className="eyebrow">{won?'A VICTORY FOR THE AGES':'THE BATTLE IS NOT OVER'}</p><div className="victory-fighter"><Portrait fighter={won?player:battle.enemy} pose="victory"/></div><h1>{won?'VICTORY':'DEFEATED'}</h1><h2>{won?player.name:battle.enemy.name} WINS</h2><p className="result-rounds">{stats.rounds} <span>FINAL SCORE</span></p><div className="result-stats"><Stat value={stats.damage} label="DAMAGE DEALT"/><Stat value={stats.hits} label="HITS LANDED"/><Stat value={stats.bestCombo} label="BEST COMBO"/><Stat value={`${stats.time}s`} label="FIGHT TIME"/></div>{mode==='competition'&&<p className="league-score">{points} POINTS · {points>=8000?'CHAMPION':points>=4000?'GOLD':points>=2000?'SILVER':'BRONZE'}</p>}{won&&battles.length>1&&step+1===battles.length&&<p className="eyebrow">{mode==='tournament'?'THE EMPEROR HAS FALLEN · TOURNAMENT CHAMPION':'CAMPAIGN COMPLETE'}</p>}<div className="result-actions"><Button variant="game" onClick={next}>{mode==='duel'?'BACK TO LOBBY':won&&step+1<battles.length?'NEXT CHALLENGER':'REMATCH'}<ArrowRight/></Button><Button variant="outline" onClick={()=>setScreen('menu')}>MAIN MENU</Button></div></section>}
+  {screen==='fight'&&battle&&player&&<Arena key={battle.stage} net={battle.net} p1={battle.net?.role==='guest'?battle.enemy:player} p2={battle.net?.role==='guest'?player:battle.enemy} arena={battle.arena} difficulty={battle.difficulty} stage={battle.stage} challenge={battle.challenge} training={mode==='training'} initialHealth={mode==='survival'?carry:100} roundSeconds={mode==='timeattack'||battle.challenge==='30 SECOND BLITZ'?30:battle.challenge==='60 SECOND ROUNDS'?60:99} onEnd={ended} onQuit={()=>setScreen('menu')}/>}
+  {screen==='result'&&player&&battle&&<section className="result-screen"><p className="eyebrow">{won?'A VICTORY FOR THE AGES':'THE BATTLE IS NOT OVER'}</p><div className="victory-fighter"><Portrait fighter={won?player:battle.enemy} pose="victory"/></div><h1>{won?'VICTORY':'DEFEATED'}</h1><h2>{won?player.name:battle.enemy.name} WINS</h2><p className="result-rounds">{stats.rounds} <span>FINAL SCORE</span></p><div className="result-stats"><Stat value={stats.damage} label="DAMAGE DEALT"/><Stat value={stats.hits} label="HITS LANDED"/><Stat value={stats.bestCombo} label="BEST COMBO"/><Stat value={`${stats.time}s`} label="FIGHT TIME"/></div>{mode==='competition'&&<p className="league-score">{points} POINTS · {points>=8000?'CHAMPION':points>=4000?'GOLD':points>=2000?'SILVER':'BRONZE'}</p>}{won&&battles.length>1&&step+1===battles.length&&<p className="eyebrow">{mode==='tournament'?'THE EMPEROR HAS FALLEN · TOURNAMENT CHAMPION':'CAMPAIGN COMPLETE'}</p>}<div className="result-actions"><Button variant="game" onClick={next}>{mode==='online'?won&&cup<ONLINE_STAGES?'NEXT LIVE OPPONENT':'NEW CUP':mode==='duel'?'BACK TO LOBBY':won&&step+1<battles.length?'NEXT CHALLENGER':'REMATCH'}<ArrowRight/></Button><Button variant="outline" onClick={()=>setScreen('menu')}>MAIN MENU</Button></div></section>}
  </main>;
 }
 function Portrait({fighter,pose='idle'}:{fighter:FighterDef;pose?:'idle'|'victory'}){return <img src={fighterSprite(fighter,pose)} className={`fighter-portrait ${skinClass(fighter)}`} alt={fighter.name} draggable={false}/>;}
