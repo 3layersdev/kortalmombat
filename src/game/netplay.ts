@@ -10,7 +10,7 @@ export interface Snap {
   ann: string; fs: string; cin: number; win: 0 | 1 | 2;
 }
 export type NetMsg =
-  | { t: "in"; k: Record<string, boolean>; taps: string[]; sp?: number }
+  | { t: "in"; k: Record<string, boolean>; taps: string[]; sp?: number | undefined }
   | { t: "st"; s: Snap }
   | { t: "end"; w1: number; w2: number; h1: number; h2: number };
 export interface NetLink { role: "host" | "guest"; send: (m: NetMsg) => void; listen: (cb: (m: NetMsg) => void) => () => void }

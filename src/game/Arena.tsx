@@ -27,7 +27,7 @@ export interface MatchStats { rounds: string; damage: number; hits: number; best
 export interface ArenaProps {
   p1: FighterDef; p2: FighterDef; arena: ArenaDef; difficulty: number; stage: string;
   roundSeconds?: number; training?: boolean; initialHealth?: number; challenge?: string;
-  onEnd: (won: boolean, stats: MatchStats) => void; onQuit: () => void; net?: NetLink;
+  onEnd: (won: boolean, stats: MatchStats) => void; onQuit: () => void; net?: NetLink | undefined;
 }
 
 export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, onQuit, roundSeconds = 99, training = false, initialHealth = 100, challenge = "", net }: ArenaProps) {
@@ -343,7 +343,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       ctx.fillStyle = color; ctx.fillText(t, W / 2, y);
     };
 
-    const control = (f: F, K: Record<string, unknown>, taps: Record<string, boolean>, pv: Record<string, boolean>, spi?: number) => {
+    const control = (f: F, K: {[k:string]:unknown;s?:unknown;l?:unknown;a?:unknown;d?:unknown;w?:unknown}, taps: Record<string, boolean>, pv: Record<string, boolean>, spi?: number) => {
       const edge = (k: string) => !!taps[k] || (!!K[k] && !pv[k]);
       if (phase === "fight" && f.frozen === 0 && f.act !== "ko") {
         if (edge("s")) push(f, "d");
