@@ -398,7 +398,6 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       else if (m.t === "end" && guest && phase !== "end") { phase = "end"; endRef.current(m.w2 >= 2, { rounds: `${m.w2} — ${m.w1}`, damage: Math.round(gStats.damage), hits: gStats.hits, bestCombo: 0, remainingHealth: Math.round(m.h2), time: Math.round(frame / 60) }); }
     });
     let netTick = 0;
-    (window as unknown as Record<string, unknown>)["__ks"] = () => [p1.x, p2.x, phase, JSON.stringify(keys.current), JSON.stringify(remote.k)];
 
     const update = () => {
       for(const f of [p1,p2]){f.px=f.x;f.py=f.y;}
