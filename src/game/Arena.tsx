@@ -7,6 +7,7 @@ import { FINISH_TIMING, victimVisual, executionPose } from './finishers';
 import { drawFinisherEffects } from './finisher-effects';
 import { arenaArt, arenaImage, animateScenery } from './scenery';
 import type { NetLink, NetMsg, Snap, SnapF } from './netplay';
+import { NET_STALL_MS, NET_TIMEOUT_MS, netVerdict } from './online';
 
 const W = 960, H = 540, GROUND = 470, GRAV = 0.9;
 type Act = "idle" | "walk" | "punch" | "kick" | "block" | "hit" | "ko" | "special" | "win" | "crouch" | "dizzy";
@@ -41,6 +42,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
   const [announcement,setAnnouncement] = useState("");
   const [finisher,setFinisher] = useState<number | null>(null);
   const [finishState,setFinishState] = useState('');
+  const [netLost,setNetLost] = useState(0);
   const endRef = useRef(onEnd);
   endRef.current = onEnd;
 
@@ -392,7 +394,10 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       winner = sn.win === 1 ? p1 : sn.win === 2 ? p2 : null;
       cinematic = sn.cin >= 0 && winner ? finishersFor(winner.d)[sn.cin] ?? null : null;
     };
+    let lastMsg = performance.now(), lostShown = 0;
     const unlisten = net?.listen((m: NetMsg) => {
+      lastMsg = performance.now();
+      if (m.t === "quit" && phase !== "end") { phase = "end"; const me = guest ? p2 : p1; endRef.current(true, { rounds: "WIN BY FORFEIT", damage: Math.round(guest ? gStats.damage : matchStats.damage), hits: guest ? gStats.hits : matchStats.hits, bestCombo: matchStats.bestCombo, remainingHealth: Math.round(me.hp / me.d.hp * 100), time: Math.round(frame / 60) }); return; }
       if (m.t === "in" && !guest) { remote.k = m.k; for (const k of m.taps) remote.taps[k] = true; if (m.sp !== undefined) remote.sp = m.sp; }
       else if (m.t === "st" && guest) applySnap(m.s);
       else if (m.t === "end" && guest && phase !== "end") { phase = "end"; endRef.current(m.w2 >= 2, { rounds: `${m.w2} — ${m.w1}`, damage: Math.round(gStats.damage), hits: gStats.hits, bestCombo: 0, remainingHealth: Math.round(m.h2), time: Math.round(frame / 60) }); }
@@ -534,7 +539,19 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
     let last = performance.now(), accumulator = 0;
     const loop = (now = performance.now()) => {
       accumulator += Math.min(now-last,100);last=now;
-      if (!paused.current) {
+      const silent = net && phase !== "end" ? now - lastMsg : 0;
+      const stalled = silent > NET_STALL_MS;
+      const left = stalled ? Math.max(0, Math.ceil((NET_TIMEOUT_MS + NET_STALL_MS - silent) / 1000)) : 0;
+      if (left !== lostShown) { lostShown = left; setNetLost(left); }
+      if (stalled && silent >= NET_TIMEOUT_MS + NET_STALL_MS && phase !== "end") {
+        phase = "end"; const h1 = p1.hp / p1.d.hp * 100, h2 = p2.hp / p2.d.hp * 100; const v = netVerdict(h1, h2, guest);
+        endRef.current(v === "win", { rounds: v === "draw" ? "DRAW · CONNECTION LOST" : `${v === "win" ? "WIN" : "LOSS"} · CONNECTION LOST`, damage: Math.round(guest ? gStats.damage : matchStats.damage), hits: guest ? gStats.hits : matchStats.hits, bestCombo: matchStats.bestCombo, remainingHealth: Math.round(guest ? h2 : h1), time: Math.round(frame / 60) });
+      }
+      if (stalled && net) {
+        // Frozen for both: the host stops simulating, the guest receives nothing; keep heartbeats flowing.
+        while(accumulator>=1000/60){accumulator-=1000/60;if(++netTick%2===0){if(guest)net.send({t:"in",k:{},taps:[]});else net.send({t:"st",s:snap()});}}
+        render(0,now);
+      } else if (!paused.current) {
         if (guest) {
           while(accumulator>=1000/60){accumulator-=1000/60;if(++netTick%2===0){const K=keys.current;const k:Record<string,boolean>={};for(const c of ["a","d","w","s","j","k","l","u","i"])k[c]=!!K[c];net.send({t:"in",k,taps:Object.keys(K.taps??{}),sp:K.sp});K.taps={};delete K.sp;}}
           render(Math.min(1,(now-snapAt)/33),now);
@@ -581,7 +598,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
       </div>
       <canvas ref={cv} width={W} height={H} className="arena-canvas" aria-label="Fighting arena"/>
       <div className="arena-caption"><span>{arena.name}</span><span>{challenge || "BEST OF THREE"}</span></div>
-      {net ? <Button variant="ghost" size="icon" onClick={onQuit} className="pause-button" aria-label="Leave match">✕</Button> : <Button variant="ghost" size="icon" onClick={togglePause} className="pause-button" aria-label="Pause">Ⅱ</Button>}
+      {net ? <Button variant="ghost" size="icon" onClick={()=>{net.send({t:"quit"});onQuit();}} className="pause-button" aria-label="Leave match">✕</Button> : <Button variant="ghost" size="icon" onClick={togglePause} className="pause-button" aria-label="Pause">Ⅱ</Button>}
       {announcement && <div className="round-announcement" role="status">{announcement}</div>}
       {finisher!==null && !guest && <div className="finisher-picker"><select aria-label="Select finisher" value={finisher} onChange={e=>setFinisher(Number(e.target.value))}>{currentFinishers.map((f,i)=><option key={f.name} value={i}>{f.name}</option>)}</select><Button variant="game" onClick={()=>{setFinisher(null);keys.current.finish=finisher;}}>FINISH</Button></div>}
       <div className="combat-dock">
@@ -589,6 +606,7 @@ export function Arena({ p1: p1Def, p2: p2Def, arena, difficulty, stage, onEnd, o
         <div className="special-controls">{me.specials.map((sp,i)=><Button key={sp.name} variant="outline" disabled={hud.cd>0} onPointerDown={e=>{e.preventDefault();keys.current.sp=i;}}>{sp.name}</Button>)}<Button variant="outline" {...hold("l")}>GUARD</Button></div>
         <div className="attack-pad"><Button variant="control" {...hold("u")} aria-label="Low punch"><b>LP</b><small>LOW PUNCH</small></Button><Button variant="control" {...hold("j")} aria-label="High punch"><b>HP</b><small>HIGH PUNCH</small></Button><Button variant="control" {...hold("i")} aria-label="Low kick"><b>LK</b><small>LOW KICK</small></Button><Button variant="control" {...hold("k")} aria-label="High kick"><b>HK</b><small>HIGH KICK</small></Button></div>
       </div>
+      {netLost>0 && <div className="pause-overlay" role="alert"><h2>CONNECTION LOST</h2><p>Reconnecting… fight paused for both players</p><strong className="net-countdown">{netLost}s</strong><p>If the connection does not return, the fighter with more health wins.</p></div>}
       {isPaused && <div className="pause-overlay"><h2>PAUSED</h2><Button variant="game" onClick={togglePause}>RESUME</Button><Button variant="outline" onClick={onQuit}>MAIN MENU</Button></div>}
     </div>
   );
