@@ -12,7 +12,8 @@ export interface Snap {
 export type NetMsg =
   | { t: "in"; k: Record<string, boolean>; taps: string[]; sp?: number | undefined }
   | { t: "st"; s: Snap }
-  | { t: "end"; w1: number; w2: number; h1: number; h2: number };
+  | { t: "end"; w1: number; w2: number; h1: number; h2: number }
+  | { t: "quit" };
 export interface NetLink { role: "host" | "guest"; send: (m: NetMsg) => void; listen: (cb: (m: NetMsg) => void) => () => void }
 export interface Peer { name: string; fighterId: string }
 export interface Match { room: string; role: "host" | "guest"; foe: Peer; arena: number }
